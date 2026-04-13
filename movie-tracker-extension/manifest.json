@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Movie Tracker",
+  "version": "0.1.0",
+  "description": "Расширение для отслеживания просмотра фильмов и сериалов",
+  "content_scripts": [
+  {
+    "matches": ["<all_urls>"],
+    "js": ["src/content/main.js"],
+    "run_at": "document_idle",
+    "type": "module"
+  }
+],
+  "permissions": [],
+  "host_permissions": []
+}

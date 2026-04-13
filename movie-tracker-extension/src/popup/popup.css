@@ -1,0 +1,241 @@
+:root {
+  --bg: #efe9fb;
+  --card: #fcfaff;
+  --card-border: rgba(56, 31, 104, 0.1);
+  --text: #26173f;
+  --muted: #6b5b88;
+  --primary: #6f42c1;
+  --primary-hover: #5f36ab;
+  --secondary: #ece2ff;
+  --secondary-hover: #dfd0ff;
+  --error: #b42318;
+  --success: #1f7a4c;
+  --shadow: 0 18px 40px rgba(73, 40, 133, 0.16);
+  --radius: 18px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 360px;
+  min-height: 460px;
+  font-family:
+    "Segoe UI",
+    "Noto Sans",
+    sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top left, rgba(111, 66, 193, 0.2), transparent 34%),
+    radial-gradient(circle at bottom right, rgba(143, 104, 221, 0.16), transparent 30%),
+    linear-gradient(180deg, #f6f1ff 0%, var(--bg) 100%);
+}
+
+.shell {
+  padding: 18px;
+}
+
+.card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), var(--card));
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.brand-mark,
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #8a63d2 0%, #56359e 100%);
+  color: #fbf8ff;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.title {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.copy,
+.connected-copy,
+.profile-email {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.status-banner {
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.status-banner.loading {
+  background: rgba(111, 66, 193, 0.12);
+  color: var(--primary);
+}
+
+.status-banner.error {
+  background: rgba(180, 35, 24, 0.12);
+  color: var(--error);
+}
+
+.form {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.field-label {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.input {
+  width: 100%;
+  border: 1px solid rgba(47, 39, 26, 0.14);
+  border-radius: 14px;
+  padding: 14px 15px;
+  font-size: 15px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--text);
+  outline: none;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    background 120ms ease;
+}
+
+.input:focus {
+  border-color: rgba(111, 66, 193, 0.48);
+  box-shadow: 0 0 0 4px rgba(111, 66, 193, 0.14);
+  background: #fff;
+}
+
+.button {
+  border: 0;
+  border-radius: 14px;
+  padding: 13px 16px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    transform 120ms ease,
+    background 120ms ease,
+    opacity 120ms ease;
+}
+
+.button:hover {
+  transform: translateY(-1px);
+}
+
+.button:disabled {
+  opacity: 0.6;
+  cursor: default;
+  transform: none;
+}
+
+.button-primary {
+  background: var(--primary);
+  color: #fff;
+}
+
+.button-primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+.button-secondary {
+  background: var(--secondary);
+  color: var(--text);
+}
+
+.button-secondary:hover:not(:disabled) {
+  background: var(--secondary-hover);
+}
+
+.link {
+  display: inline-block;
+  margin-top: 18px;
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.error {
+  margin: 12px 0 0;
+  color: var(--error);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.profile {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.profile-name {
+  margin: 0 0 4px;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.connected-box {
+  margin-top: 18px;
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(31, 122, 76, 0.08);
+  border: 1px solid rgba(31, 122, 76, 0.16);
+}
+
+.connected-title {
+  margin: 0 0 6px;
+  color: var(--success);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.hidden {
+  display: none !important;
+}
