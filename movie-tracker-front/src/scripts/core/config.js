@@ -12,10 +12,6 @@
     return String(value ?? "").trim().replace(/\/+$/, "");
   }
 
-  function isLocalHostname(hostname) {
-    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
-  }
-
   function readStoredApiBaseUrl() {
     try {
       return normalizeUrl(window.localStorage.getItem(API_BASE_URL_STORAGE_KEY));
@@ -56,7 +52,7 @@
       return storedValue;
     }
 
-    return isLocalHostname(window.location.hostname) ? LOCAL_API_BASE_URL : "";
+    return LOCAL_API_BASE_URL;
   }
 
   window.MovieTrackerConfig = Object.freeze({
