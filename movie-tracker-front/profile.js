@@ -884,7 +884,7 @@
   function logoutProfile() {
     localStorage.removeItem(CURRENT_USER_STORAGE_KEY);
     localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
-    window.location.href = "./index.html";
+    window.location.href = routes.home;
   }
 
   function openFolder(folderId) {
