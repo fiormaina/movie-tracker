@@ -476,7 +476,21 @@
             Код для подключения расширения
             <span class="profile-connect__help" tabindex="0" aria-label="Подсказка о коде расширения">
               ?
-              <span class="profile-connect__tooltip">Этот код нужен только вам, чтобы привязать расширение браузера к своему аккаунту.</span>
+              <span class="profile-connect__tooltip">
+                <strong>Расширение автоматически отслеживает, что вы смотрите, и добавляет это в ваш профиль.</strong>
+                <br /><br />
+                Поддерживаемые платформы: Кинопоиск, ИВИ, Амедиатека, Premier, KION, Wink, Viju
+                <br /><br />
+                Как начать:
+                <br />
+                1. Получите код подключения
+                <br />
+                2. Войдите или зарегистрируйтесь
+                <br />
+                3. Вставьте код в расширение
+                <br /><br />
+                После этого просмотр будет сохраняться автоматически.
+              </span>
             </span>
           </span>
           <strong class="profile-connect__code">${escapeHtml(state.user.extensionCode || "MT-USER-2026")}</strong>
