@@ -1,6 +1,7 @@
 const STORAGE_KEY = 'movieTrackerBinding';
-const PLATFORM_URL = 'http://localhost:8000';
-const USE_MOCK_BINDING = true;
+const PLATFORM_URL = 'http://localhost/movie-tracker/movie-tracker-front/index.html';
+const API_BASE_URL = 'http://127.0.0.1:8000';
+const USE_MOCK_BINDING = false;
 
 const elements = {
   statusBanner: document.getElementById('status-banner'),
@@ -11,7 +12,7 @@ const elements = {
   connectButton: document.getElementById('connect-button'),
   errorText: document.getElementById('error-text'),
   profileName: document.getElementById('profile-name'),
-  profileEmail: document.getElementById('profile-email'),
+  profileUsername: document.getElementById('profile-username'),
   connectedAt: document.getElementById('connected-at'),
   avatar: document.getElementById('avatar'),
   openPlatformButton: document.getElementById('open-platform-button'),
@@ -39,6 +40,14 @@ function storageRemove() {
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function readJsonSafely(response) {
+  try {
+    return await response.json();
+  } catch {
+    return null;
+  }
 }
 
 function formatDate(value) {
@@ -84,17 +93,45 @@ function setPlatformLinks() {
   elements.platformLinkUnbound.href = PLATFORM_URL;
 }
 
-function openPlatform() {
+async function openPlatform(event) {
+  event?.preventDefault();
+
+  const binding = await storageGet(STORAGE_KEY);
+  const targetUrl = binding?.profileUrl || PLATFORM_URL;
+
   if (chrome.tabs?.create) {
-    chrome.tabs.create({ url: PLATFORM_URL });
+    chrome.tabs.create({ url: targetUrl });
     return;
   }
 
-  window.open(PLATFORM_URL, '_blank', 'noopener,noreferrer');
+  window.open(targetUrl, '_blank', 'noopener,noreferrer');
 }
 
-function initialsFromName(name, email) {
-  const source = String(name || email || 'MT').trim();
+function formatUsername(username) {
+  const normalized = String(username || '')
+    .trim()
+    .replace(/^@+/, '');
+  return normalized ? `@${normalized}` : '';
+}
+
+function normalizeUserPayload(user = {}) {
+  const username = String(user.login || user.username || '').trim().replace(/^@+/, '');
+  const name =
+    String(user.display_name || user.displayName || user.name || '').trim() ||
+    username ||
+    'Подключённый аккаунт';
+
+  return {
+    email: user.email || '',
+    extensionCode: user.extension_code || user.extensionCode || '',
+    name,
+    profileUrl: user.profile_url || user.profileUrl || PLATFORM_URL,
+    username,
+  };
+}
+
+function initialsFromName(name, username) {
+  const source = String(name || username || 'MT').trim();
   const parts = source.split(/\s+/).filter(Boolean);
   if (parts.length >= 2) {
     return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
@@ -113,11 +150,11 @@ function renderBound(binding) {
   setHidden(elements.viewBound, false);
 
   elements.profileName.textContent = binding.name || 'Подключённый аккаунт';
-  elements.profileEmail.textContent = binding.email || '';
+  elements.profileUsername.textContent = formatUsername(binding.username);
   elements.connectedAt.textContent = binding.connectedAt
     ? `Привязано: ${formatDate(binding.connectedAt)}`
     : 'Аккаунт успешно подключён';
-  elements.avatar.textContent = initialsFromName(binding.name, binding.email);
+  elements.avatar.textContent = initialsFromName(binding.name, binding.username);
 }
 
 async function bindWithMock(code) {
@@ -143,39 +180,46 @@ async function bindWithMock(code) {
   }
 
   return {
+    accessToken: 'mock-token',
+    extensionCode: normalized,
     name: 'Demo User',
-    email: 'demo.user@example.com',
+    profileUrl: PLATFORM_URL,
+    username: 'demo.user',
     connectedAt: new Date().toISOString(),
     code: normalized,
   };
 }
 
 async function bindWithServer(code) {
-  const response = await fetch(`${PLATFORM_URL}/api/extension/bind`, {
+  const normalized = String(code || '').trim().toUpperCase();
+  const response = await fetch(`${API_BASE_URL}/api/v1/auth/extension-login`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ code }),
+    body: JSON.stringify({ extension_code: normalized }),
   });
 
-  if (response.status === 400 || response.status === 404) {
-    const error = new Error('Не удалось подключить');
+  const data = await readJsonSafely(response);
+
+  if (response.status === 400 || response.status === 401 || response.status === 404 || response.status === 422) {
+    const error = new Error(data?.detail?.message || 'Не удалось подключить');
     error.code = 'bind_failed';
     throw error;
   }
 
   if (!response.ok) {
-    const error = new Error('Сервер недоступен');
+    const error = new Error(data?.detail?.message || 'Сервер недоступен');
     error.code = 'server_unavailable';
     throw error;
   }
 
-  const profile = await response.json();
+  const user = normalizeUserPayload(data?.user);
   return {
-    name: profile.name || '',
-    email: profile.email || '',
-    connectedAt: profile.connectedAt || new Date().toISOString(),
+    accessToken: data?.access_token || '',
+    code: normalized,
+    connectedAt: new Date().toISOString(),
+    ...user,
   };
 }
 
@@ -185,6 +229,42 @@ async function bindAccount(code) {
   }
 
   return bindWithServer(code);
+}
+
+async function fetchCurrentUser(accessToken) {
+  const response = await fetch(`${API_BASE_URL}/api/v1/auth/me`, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+    },
+  });
+
+  const data = await readJsonSafely(response);
+
+  if (response.status === 401 || response.status === 403) {
+    const error = new Error('Сессия истекла');
+    error.code = 'auth_expired';
+    throw error;
+  }
+
+  if (!response.ok) {
+    const error = new Error(data?.detail?.message || 'Не удалось загрузить профиль');
+    error.code = 'profile_unavailable';
+    throw error;
+  }
+
+  return normalizeUserPayload(data);
+}
+
+async function refreshBinding(binding) {
+  if (!binding?.accessToken) {
+    return binding;
+  }
+
+  const user = await fetchCurrentUser(binding.accessToken);
+  return {
+    ...binding,
+    ...user,
+  };
 }
 
 async function handleSubmit(event) {
@@ -229,7 +309,33 @@ async function bootstrap() {
 
   const binding = await storageGet(STORAGE_KEY);
   if (binding) {
-    renderBound(binding);
+    if (!binding.accessToken) {
+      renderBound(binding);
+      return;
+    }
+
+    setBanner('Загрузка профиля…', 'loading');
+    setLoadingState(true);
+
+    try {
+      const refreshedBinding = await refreshBinding(binding);
+      await storageSet(refreshedBinding);
+      setBanner('');
+      renderBound(refreshedBinding);
+    } catch (error) {
+      if (error?.code === 'auth_expired') {
+        await storageRemove();
+        setBanner('Сессия истекла, подключите расширение заново', 'error');
+        renderUnbound();
+        return;
+      }
+
+      setBanner('Не удалось обновить данные профиля', 'error');
+      renderBound(binding);
+    } finally {
+      setLoadingState(false);
+    }
+
     return;
   }
 
@@ -238,6 +344,7 @@ async function bootstrap() {
 
 elements.bindForm.addEventListener('submit', handleSubmit);
 elements.openPlatformButton.addEventListener('click', openPlatform);
+elements.platformLinkUnbound.addEventListener('click', openPlatform);
 elements.disconnectButton.addEventListener('click', handleDisconnect);
 
 bootstrap().catch(() => {
