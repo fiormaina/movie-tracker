@@ -13,13 +13,25 @@
   position: sticky;
   top: 0;
   z-index: 30;
+  isolation: isolate;
   display: flex;
   align-items: center;
   gap: 28px;
   height: 72px;
   padding: 0 4px;
-  border-bottom: 1px solid var(--line-soft);
   background: transparent;
+}
+
+.history-page__navbar::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 50%;
+  width: 100vw;
+  transform: translateX(-50%);
+  border-bottom: 1px solid var(--line-soft);
+  background: rgba(255, 255, 255, 0.8);
+  z-index: -1;
+  pointer-events: none;
 }
 
 .history-page__logo {
