@@ -17,6 +17,7 @@ const REGISTER_ENDPOINT = `${API_V1_BASE_URL}/auth/register`;
 const LOGIN_ENDPOINT = `${API_V1_BASE_URL}/auth/login`;
 const CURRENT_USER_STORAGE_KEY = "movieTracker.currentUser";
 const DEFAULT_DISPLAY_NAME = "Пользователь";
+const DEFAULT_AVATAR_KEY = "violet";
 const AUTH_TEMPORARY_ERROR_MESSAGE = "произошла ошибка, скоро все заработает";
 
 const authModalContent = {
@@ -353,7 +354,12 @@ function normalizeAuthUser(responseData, fallbackIdentifier) {
     followingCount: source.followingCount ?? 0,
     followersCount: source.followersCount ?? 0,
     extensionCode: source.extensionCode ?? source.extension_code ?? "MT-USER-2026",
-    profileUrl: source.profileUrl ?? new URL(routes.profile(), window.location.origin).href,
+    avatarKey: source.avatarKey ?? source.avatar_key ?? DEFAULT_AVATAR_KEY,
+    avatarImage: source.avatarImage ?? source.avatar_image ?? source.avatarUrl ?? "",
+    profileUrl:
+      source.profileUrl ??
+      source.profile_url ??
+      new URL(routes.profile({ user: login }), window.location.origin).href,
   };
 }
 

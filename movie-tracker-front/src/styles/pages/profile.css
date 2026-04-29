@@ -68,12 +68,9 @@
   place-items: center;
   width: 122px;
   height: 122px;
-  border: 1px solid rgba(124, 92, 252, 0.18);
-  border-radius: 999px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.46), rgba(255, 255, 255, 0.08)),
-    linear-gradient(135deg, #8c7fff, #6e53f4);
-  color: var(--white);
+}
+
+.profile-hero__avatar-visual {
   box-shadow: 0 20px 42px rgba(83, 62, 156, 0.18);
 }
 
@@ -305,6 +302,13 @@
   padding: 0 14px;
 }
 
+.profile-public-folders {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 440px));
+  justify-content: start;
+  gap: 16px;
+}
+
 .profile-empty-state {
   display: grid;
   gap: 8px;
@@ -370,6 +374,115 @@
   display: grid;
   gap: 8px;
   color: #6d6a78;
+}
+
+.profile-edit-avatar-preview {
+  display: grid;
+  justify-content: start;
+  margin-bottom: 2px;
+}
+
+.profile-edit-avatar-preview__visual {
+  box-shadow: 0 18px 36px rgba(104, 87, 164, 0.18);
+}
+
+.profile-avatar-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.profile-avatar-upload {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 46px;
+  padding: 10px 14px;
+  border: 1px solid rgba(124, 92, 252, 0.16);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.82);
+  cursor: pointer;
+  transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+}
+
+.profile-avatar-upload:hover,
+.profile-avatar-upload:focus-within {
+  border-color: rgba(124, 92, 252, 0.28);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 14px 28px rgba(104, 87, 164, 0.1);
+}
+
+.profile-avatar-upload--active {
+  border-color: rgba(124, 92, 252, 0.32);
+  background: rgba(240, 238, 255, 0.92);
+}
+
+.profile-avatar-upload__button {
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
+.profile-avatar-upload__hint {
+  color: #6d6a78;
+  font-size: 0.94rem;
+}
+
+.profile-avatar-reset {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 42px;
+  padding: 0 14px;
+  border: 1px solid rgba(124, 92, 252, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  color: #6d6a78;
+  cursor: pointer;
+  font-weight: 600;
+  transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease;
+}
+
+.profile-avatar-reset:hover,
+.profile-avatar-reset:focus-visible {
+  border-color: rgba(124, 92, 252, 0.28);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.profile-avatar-picker {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.profile-avatar-option {
+  display: grid;
+  place-items: center;
+  min-height: 78px;
+  padding: 10px;
+  border: 1px solid rgba(124, 92, 252, 0.14);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.profile-avatar-option:hover,
+.profile-avatar-option:focus-visible {
+  transform: translateY(-1px);
+  border-color: rgba(124, 92, 252, 0.28);
+  box-shadow: 0 16px 30px rgba(104, 87, 164, 0.12);
+}
+
+.profile-avatar-option--selected {
+  border-color: rgba(124, 92, 252, 0.34);
+  background: rgba(240, 238, 255, 0.94);
+  box-shadow: 0 0 0 4px rgba(124, 92, 252, 0.08);
+}
+
+.profile-avatar-option__visual {
+  box-shadow: none;
 }
 
 .profile-edit-input {
@@ -470,6 +583,10 @@
     height: 96px;
   }
 
+  .profile-hero__avatar-visual {
+    --avatar-size: 96px !important;
+  }
+
   .profile-hero__actions,
   .profile-button,
   .profile-connect {
@@ -491,6 +608,16 @@
     width: 100%;
   }
 
+  .profile-avatar-picker {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .profile-avatar-upload,
+  .profile-avatar-reset {
+    width: 100%;
+    justify-content: center;
+  }
+
   .profile-edit-delete {
     justify-content: flex-start;
   }
@@ -500,9 +627,12 @@
     flex-direction: column;
   }
 
-  .profile-stats,
-  .profile-public-folders {
+  .profile-stats {
     grid-template-columns: 1fr;
+  }
+
+  .profile-public-folders {
+    grid-template-columns: minmax(0, 440px);
   }
 
   .profile-logout,

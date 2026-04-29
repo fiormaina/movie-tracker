@@ -6,7 +6,14 @@
     writeClipboardText,
   } = window.MovieTrackerUI;
   const { createToastController, pluralizeRu } = window.MovieTrackerHelpers;
-  const { createPrimaryTabs, renderAppFooter, renderAppHeader } = window.MovieTrackerAppShell;
+  const {
+    avatarPresets,
+    createPrimaryTabs,
+    defaultAvatarKey,
+    renderAppFooter,
+    renderAppHeader,
+    renderUserAvatar,
+  } = window.MovieTrackerAppShell;
   const { renderPageState } = window.MovieTrackerFeedback;
   const { renderProfileFolderCard } = window.MovieTrackerFolderCard;
   const {
@@ -23,6 +30,8 @@
   const CURRENT_USER_STORAGE_KEY = "movieTracker.currentUser";
   const ACCESS_TOKEN_STORAGE_KEY = "movieTracker.accessToken";
   const DEFAULT_DISPLAY_NAME = "Пользователь";
+  const AVATAR_UPLOAD_MAX_BYTES = 3 * 1024 * 1024;
+  const AVATAR_OUTPUT_SIZE = 256;
   const API_BASE_URL = String(window.MovieTrackerConfig?.apiBaseUrl ?? "").replace(/\/+$/, "");
   const API_V1_BASE_URL = `${API_BASE_URL}/api/v1`;
   const PROFILE_ENDPOINT = `${API_V1_BASE_URL}/auth/me`;
@@ -43,6 +52,8 @@
       isOpen: false,
       displayName: "",
       username: "",
+      avatarKey: defaultAvatarKey,
+      avatarImage: "",
       confirmDelete: false,
     },
     toasts: [],
@@ -104,6 +115,22 @@
         source.extension_code ??
         fallbackUser.extensionCode ??
         "MT-USER-2026",
+      avatarKey:
+        source.avatarKey ??
+        source.avatar_key ??
+        fallbackUser.avatarKey ??
+        defaultAvatarKey,
+      avatarImage:
+        source.avatarImage ??
+        source.avatar_image ??
+        source.avatarUrl ??
+        fallbackUser.avatarImage ??
+        "",
+      profileUrl:
+        source.profileUrl ??
+        source.profile_url ??
+        fallbackUser.profileUrl ??
+        getProfileUrl(username, true),
     };
   }
 
@@ -136,7 +163,9 @@
         throw new Error(detail.message);
       }
 
-      throw new Error(detail ?? data?.message ?? PROFILE_TEMPORARY_ERROR_MESSAGE);
+      const error = new Error(detail ?? data?.message ?? PROFILE_TEMPORARY_ERROR_MESSAGE);
+      error.status = response.status;
+      throw error;
     }
 
     return data;
@@ -152,6 +181,8 @@
         body: JSON.stringify({
           display_name: patch.displayName,
           login: patch.username,
+          avatar_key: patch.avatarKey,
+          avatar_image: patch.avatarImage || null,
         }),
       });
     },
@@ -299,12 +330,33 @@
     }));
   }
 
-  function renderUserIcon(size) {
+  function renderAvatarPicker(selectedAvatarKey, hasCustomAvatar = false) {
     return `
-      <svg width="${size}" height="${size}" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-        <circle cx="10" cy="7" r="4" fill="rgba(255,255,255,0.92)"></circle>
-        <path d="M2 18c0-4 3.6-7 8-7s8 3 8 7" stroke="rgba(255,255,255,0.92)" stroke-width="1.5" stroke-linecap="round"></path>
-      </svg>
+      <div class="profile-avatar-picker" role="radiogroup" aria-label="Выбор аватарки">
+        ${Object.values(avatarPresets)
+          .map((preset) => {
+            const isSelected = !hasCustomAvatar && preset.id === selectedAvatarKey;
+            return `
+              <button
+                class="profile-avatar-option ${isSelected ? "profile-avatar-option--selected" : ""}"
+                type="button"
+                data-profile-avatar="${preset.id}"
+                role="radio"
+                aria-checked="${isSelected ? "true" : "false"}"
+                aria-label="${escapeHtml(preset.label)}"
+                title="${escapeHtml(preset.label)}"
+              >
+                ${renderUserAvatar({
+                  avatarKey: preset.id,
+                  size: 58,
+                  className: "profile-avatar-option__visual",
+                  iconSize: 24,
+                })}
+              </button>
+            `;
+          })
+          .join("")}
+      </div>
     `;
   }
 
@@ -336,7 +388,13 @@
     return `
       <section class="profile-hero" aria-label="Профиль пользователя">
         <div class="profile-hero__avatar" aria-hidden="true">
-          ${renderUserIcon(46)}
+          ${renderUserAvatar({
+            avatarKey: state.user.avatarKey,
+            avatarImage: state.user.avatarImage,
+            size: 122,
+            className: "profile-hero__avatar-visual",
+            iconSize: 46,
+          })}
         </div>
         <div class="profile-hero__info">
           <span class="profile-hero__label">${state.isOwner ? "Ваш профиль" : "Публичный профиль"}</span>
@@ -527,6 +585,36 @@
           <h2 class="modal-card__title">Редактировать профиль</h2>
 
           <div class="profile-edit-form">
+            <div class="profile-edit-field">
+              <span>Аватарка</span>
+              <div class="profile-edit-avatar-preview" aria-hidden="true">
+                ${renderUserAvatar({
+                  avatarKey: overlay.avatarKey,
+                  avatarImage: overlay.avatarImage,
+                  size: 82,
+                  className: "profile-edit-avatar-preview__visual",
+                  iconSize: 32,
+                })}
+              </div>
+              <div class="profile-avatar-upload-row">
+                <label class="profile-avatar-upload ${overlay.avatarImage ? "profile-avatar-upload--active" : ""}">
+                  <input
+                    class="sr-only"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    data-profile-avatar-input
+                  />
+                  <span class="profile-avatar-upload__button">Загрузить с устройства</span>
+                  <span class="profile-avatar-upload__hint" data-profile-avatar-status>
+                    ${overlay.avatarImage ? "Фото загружено с устройства" : "PNG, JPG, WEBP или GIF до 3 МБ"}
+                  </span>
+                </label>
+                ${overlay.avatarImage
+                  ? `<button class="profile-avatar-reset" type="button" data-action="clear-custom-avatar">Убрать фото</button>`
+                  : ""}
+              </div>
+              ${renderAvatarPicker(overlay.avatarKey, Boolean(overlay.avatarImage))}
+            </div>
             <label class="profile-edit-field">
               <span>Имя</span>
               <input class="profile-edit-input" type="text" value="${escapeHtml(overlay.displayName)}" data-profile-edit-name maxlength="80" />
@@ -738,6 +826,8 @@
         isOpen: true,
         displayName: currentState.user.displayName,
         username: currentState.user.username,
+        avatarKey: currentState.user.avatarKey ?? defaultAvatarKey,
+        avatarImage: currentState.user.avatarImage ?? "",
         confirmDelete: false,
       },
     }));
@@ -750,36 +840,221 @@
     }));
   }
 
+  function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result ?? ""));
+      reader.onerror = () => reject(new Error("Не удалось прочитать файл"));
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function loadImageElement(src) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error("Не удалось загрузить изображение"));
+      image.src = src;
+    });
+  }
+
+  async function prepareAvatarImage(file) {
+    if (!file) {
+      throw new Error("Выберите файл изображения");
+    }
+
+    if (!String(file.type || "").startsWith("image/")) {
+      throw new Error("Поддерживаются только изображения");
+    }
+
+    if (file.size > AVATAR_UPLOAD_MAX_BYTES) {
+      throw new Error("Файл слишком большой. Максимум 3 МБ");
+    }
+
+    const originalDataUrl = await readFileAsDataUrl(file);
+    const image = await loadImageElement(originalDataUrl);
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+      throw new Error("Не удалось подготовить изображение");
+    }
+
+    canvas.width = AVATAR_OUTPUT_SIZE;
+    canvas.height = AVATAR_OUTPUT_SIZE;
+
+    const sourceSize = Math.min(image.naturalWidth, image.naturalHeight);
+    const sourceX = (image.naturalWidth - sourceSize) / 2;
+    const sourceY = (image.naturalHeight - sourceSize) / 2;
+
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = "high";
+    context.drawImage(
+      image,
+      sourceX,
+      sourceY,
+      sourceSize,
+      sourceSize,
+      0,
+      0,
+      AVATAR_OUTPUT_SIZE,
+      AVATAR_OUTPUT_SIZE,
+    );
+
+    return canvas.toDataURL("image/jpeg", 0.9);
+  }
+
+  function syncEditProfileAvatarUI() {
+    if (!rootElement || !state.editProfileOverlay.isOpen) return;
+
+    const preview = rootElement.querySelector(".profile-edit-avatar-preview");
+    if (preview) {
+      preview.innerHTML = renderUserAvatar({
+        avatarKey: state.editProfileOverlay.avatarKey,
+        avatarImage: state.editProfileOverlay.avatarImage,
+        size: 82,
+        className: "profile-edit-avatar-preview__visual",
+        iconSize: 32,
+      });
+    }
+
+    rootElement.querySelectorAll("[data-profile-avatar]").forEach((button) => {
+      const isSelected =
+        !state.editProfileOverlay.avatarImage &&
+        button.dataset.profileAvatar === state.editProfileOverlay.avatarKey;
+      button.classList.toggle("profile-avatar-option--selected", isSelected);
+      button.setAttribute("aria-checked", isSelected ? "true" : "false");
+    });
+
+    const uploadLabel = rootElement.querySelector(".profile-avatar-upload");
+    uploadLabel?.classList.toggle(
+      "profile-avatar-upload--active",
+      Boolean(state.editProfileOverlay.avatarImage),
+    );
+
+    const uploadStatus = rootElement.querySelector("[data-profile-avatar-status]");
+    if (uploadStatus) {
+      uploadStatus.textContent = state.editProfileOverlay.avatarImage
+        ? "Фото загружено с устройства"
+        : "PNG, JPG, WEBP или GIF до 3 МБ";
+    }
+
+    const resetButton = rootElement.querySelector(".profile-avatar-reset");
+    if (state.editProfileOverlay.avatarImage) {
+      if (!resetButton) {
+        rootElement
+          .querySelector(".profile-avatar-upload-row")
+          ?.insertAdjacentHTML(
+            "beforeend",
+            `<button class="profile-avatar-reset" type="button" data-action="clear-custom-avatar">Убрать фото</button>`,
+          );
+      }
+    } else {
+      resetButton?.remove();
+    }
+  }
+
+  function selectProfileAvatar(avatarKey) {
+    if (!avatarPresets[avatarKey]) return;
+    if (state.editProfileOverlay.avatarKey === avatarKey && !state.editProfileOverlay.avatarImage) return;
+
+    state.editProfileOverlay.avatarKey = avatarKey;
+    state.editProfileOverlay.avatarImage = "";
+    syncEditProfileAvatarUI();
+  }
+
+  async function applyCustomAvatarFile(file) {
+    const avatarImage = await prepareAvatarImage(file);
+    state.editProfileOverlay.avatarImage = avatarImage;
+    syncEditProfileAvatarUI();
+  }
+
+  function clearCustomAvatar() {
+    if (!state.editProfileOverlay.avatarImage) return;
+    state.editProfileOverlay.avatarImage = "";
+    syncEditProfileAvatarUI();
+  }
+
+  function applyProfileUpdate(updatedUser) {
+    persistCurrentUser(updatedUser);
+    upsertUser(updatedUser);
+
+    setState((currentState) => ({
+      ...currentState,
+      user: {
+        ...currentState.user,
+        ...updatedUser,
+        profileUrl: getProfileUrl(updatedUser.username, true),
+      },
+      editProfileOverlay: { ...initialState.editProfileOverlay },
+    }));
+
+    syncProfileLocation(updatedUser, true);
+  }
+
+  function canFallbackToLocalProfileSave(error, hasToken) {
+    if (!hasToken) return true;
+    return [404, 405, 501].includes(error?.status);
+  }
+
   async function saveProfile() {
     if (!state.isOwner || !state.user) return;
 
     const displayName = state.editProfileOverlay.displayName.trim();
     const username = state.editProfileOverlay.username.trim().replace(/^@+/, "");
+    const avatarKey = avatarPresets[state.editProfileOverlay.avatarKey]
+      ? state.editProfileOverlay.avatarKey
+      : defaultAvatarKey;
+    const avatarImage = state.editProfileOverlay.avatarImage || "";
 
     if (!displayName || !username) {
       showToast("Заполните имя и логин", "error");
       return;
     }
 
-    try {
-      const responseData = await profileApi.updateProfile({ displayName, username });
-      const updatedUser = normalizeProfileUser(responseData, state.user);
-      persistCurrentUser(updatedUser);
-      upsertUser(updatedUser);
+    const hasToken = Boolean(readAccessToken());
+    let updatedUser = {
+      ...state.user,
+      displayName,
+      username,
+      avatarKey,
+      avatarImage,
+      profileUrl: getProfileUrl(username, true),
+    };
 
-      setState((currentState) => ({
-        ...currentState,
-        user: {
-          ...currentState.user,
+    try {
+      if (hasToken) {
+        const responseData = await profileApi.updateProfile({
+          displayName,
+          username,
+          avatarKey,
+          avatarImage,
+        });
+        updatedUser = {
           ...updatedUser,
-          profileUrl: getProfileUrl(updatedUser.username, true),
-        },
-        editProfileOverlay: { ...initialState.editProfileOverlay },
-      }));
-      syncProfileLocation(updatedUser, true);
-      showToast("Профиль обновлен", "success");
+          ...normalizeProfileUser(responseData, updatedUser),
+          avatarKey:
+            responseData?.avatarKey ??
+            responseData?.avatar_key ??
+            updatedUser.avatarKey,
+          avatarImage:
+            responseData?.avatarImage ??
+            responseData?.avatar_image ??
+            updatedUser.avatarImage,
+        };
+      }
+
+      applyProfileUpdate(updatedUser);
+      showToast(hasToken ? "Профиль обновлен" : "Профиль сохранен локально", "success");
     } catch (error) {
       console.error(error);
+
+      if (canFallbackToLocalProfileSave(error, hasToken)) {
+        applyProfileUpdate(updatedUser);
+        showToast("Профиль сохранен локально", "success");
+        return;
+      }
+
       showToast("Не удалось сохранить профиль", "error");
     }
   }
@@ -836,6 +1111,12 @@
       return;
     }
 
+    const avatarOption = event.target.closest("[data-profile-avatar]");
+    if (avatarOption) {
+      selectProfileAvatar(avatarOption.dataset.profileAvatar);
+      return;
+    }
+
     const actionButton = event.target.closest("[data-action]");
     if (actionButton) {
       const action = actionButton.dataset.action;
@@ -863,6 +1144,11 @@
 
       if (action === "save-profile") {
         saveProfile();
+        return;
+      }
+
+      if (action === "clear-custom-avatar") {
+        clearCustomAvatar();
         return;
       }
 
@@ -925,6 +1211,23 @@
     }
   }
 
+  async function handleRootChange(event) {
+    const avatarInput = event.target.closest("[data-profile-avatar-input]");
+    if (!avatarInput) return;
+
+    const file = avatarInput.files?.[0];
+    if (!file) return;
+
+    try {
+      await applyCustomAvatarFile(file);
+    } catch (error) {
+      console.error(error);
+      showToast(error.message || "Не удалось загрузить изображение", "error");
+    } finally {
+      avatarInput.value = "";
+    }
+  }
+
   function handleRootKeydown(event) {
     if (event.key === "Escape" && state.editProfileOverlay.isOpen) {
       closeEditProfileOverlay();
@@ -946,6 +1249,7 @@
     rootElement.addEventListener("click", handleRootClick);
     rootElement.addEventListener("keydown", handleRootKeydown);
     rootElement.addEventListener("input", handleRootInput);
+    rootElement.addEventListener("change", handleRootChange);
     renderApp();
     loadProfileView();
   }

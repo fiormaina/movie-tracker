@@ -2,6 +2,7 @@
   const routes = window.MovieTrackerRoutes;
   const STORAGE_KEY = "movieTracker.foldersState.v2";
   const CURRENT_USER_STORAGE_KEY = "movieTracker.currentUser";
+  const DEFAULT_AVATAR_KEY = "violet";
   const STORE_DELAY = 360;
   const STORE_SHOULD_FAIL = false;
   const TITLE_MAX_LENGTH = 80;
@@ -11,6 +12,7 @@
     displayName: "Алексей Смирнов",
     username: "kinowatcher",
     extensionCode: "MT-ALEX-2026",
+    avatarKey: DEFAULT_AVATAR_KEY,
   });
 
   function readStoredCurrentUser() {
@@ -39,6 +41,15 @@
         safeSource.extensionCode ??
         safeSource.extension_code ??
         fallbackCurrentUser.extensionCode,
+      avatarKey:
+        safeSource.avatarKey ??
+        safeSource.avatar_key ??
+        fallbackCurrentUser.avatarKey,
+      avatarImage:
+        safeSource.avatarImage ??
+        safeSource.avatar_image ??
+        safeSource.avatarUrl ??
+        "",
     };
   }
 
@@ -51,12 +62,14 @@
       displayName: "Анна Левина",
       username: "anna",
       extensionCode: "MT-ANNA-2026",
+      avatarKey: "rose",
     },
     "maxim-2026": {
       id: "maxim-2026",
       displayName: "Максим Орлов",
       username: "maxim",
       extensionCode: "MT-MAX-2026",
+      avatarKey: "ocean",
     },
   });
 
@@ -337,6 +350,12 @@
           ...currentUser,
         },
       };
+      nextState.users = Object.fromEntries(
+        Object.entries(nextState.users).map(([userId, user]) => [
+          userId,
+          normalizeCurrentUser({ ...user, id: userId }),
+        ]),
+      );
       nextState.followingByUserId = normalizeFollowingMap(nextState.followingByUserId, nextState.users);
       nextState.mediaCatalog = nextState.mediaCatalog.length
         ? nextState.mediaCatalog
