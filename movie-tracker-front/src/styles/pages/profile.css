@@ -154,6 +154,7 @@
 
 .profile-connect__help {
   position: relative;
+  z-index: 40;
   display: inline-grid;
   place-items: center;
   width: 20px;
@@ -169,10 +170,10 @@
 .profile-connect__tooltip {
   position: absolute;
   left: 50%;
-  top: calc(100% + 12px);
-  z-index: 35;
-  width: clamp(280px, 38vw, 420px);
-  max-width: calc(100vw - 48px);
+  bottom: calc(100% + 14px);
+  z-index: 1200;
+  width: clamp(340px, 46vw, 560px);
+  max-width: calc(100vw - 32px);
   padding: 14px 16px;
   border-radius: 12px;
   background: var(--black-soft);
@@ -182,6 +183,7 @@
   line-height: 1.45;
   text-align: left;
   white-space: normal;
+  box-shadow: 0 18px 40px rgba(18, 16, 28, 0.28);
   opacity: 0;
   pointer-events: none;
   transform: translateX(-50%) translateY(6px);
