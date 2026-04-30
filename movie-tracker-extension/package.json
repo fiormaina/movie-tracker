@@ -1,0 +1,14 @@
+{
+  "name": "movie-tracker-extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "clean": "node -e \"import('node:fs').then(fs=>fs.rmSync('dist',{recursive:true,force:true}))\""
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

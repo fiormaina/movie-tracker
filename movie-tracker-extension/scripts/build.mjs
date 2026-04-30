@@ -22,23 +22,11 @@ const esbuildOptions = {
 
 const distManifest = {
   manifest_version: 3,
-  name: 'Смотрикс',
+  name: 'Мои просмотры',
   version: '0.1.0',
   description: 'Расширение для отслеживания просмотра фильмов и сериалов',
-  icons: {
-    16: 'assets/smotrix-icon.png',
-    32: 'assets/smotrix-icon.png',
-    48: 'assets/smotrix-icon.png',
-    128: 'assets/smotrix-icon.png',
-  },
   action: {
-    default_title: 'Смотрикс',
-    default_icon: {
-      16: 'assets/smotrix-icon.png',
-      32: 'assets/smotrix-icon.png',
-      48: 'assets/smotrix-icon.png',
-      128: 'assets/smotrix-icon.png',
-    },
+    default_title: 'Мои просмотры',
     default_popup: 'popup/popup.html',
   },
   content_scripts: [
@@ -104,29 +92,17 @@ async function copyPopupAssets() {
   );
 }
 
-async function copyExtensionAssets() {
-  const targetDir = path.join(distDir, 'assets');
-
-  await mkdir(targetDir, { recursive: true });
-  await copyFile(
-    path.join(root, 'src', 'assets', 'smotrix-icon.png'),
-    path.join(targetDir, 'smotrix-icon.png')
-  );
-}
-
 if (isWatch) {
   const ctx = await context(esbuildOptions);
   await writeDistManifest();
   await copyPageScripts();
   await copyPopupAssets();
-  await copyExtensionAssets();
   await ctx.watch();
   console.log('[build] watch mode started');
 } else {
   await writeDistManifest();
   await copyPageScripts();
   await copyPopupAssets();
-  await copyExtensionAssets();
   await build(esbuildOptions);
   console.log('[build] done');
 }

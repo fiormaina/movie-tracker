@@ -3,16 +3,16 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Смотрикс</title>
+    <title>Movie Tracker</title>
     <link rel="stylesheet" href="./popup.css" />
   </head>
   <body>
     <main class="shell">
       <section class="card">
         <div class="brand">
-          <img class="brand-logo" src="../assets/smotrix-icon.png" alt="Смотрикс" />
+          <div class="brand-mark">MT</div>
           <div>
-            <p class="eyebrow">Смотрикс</p>
+            <p class="eyebrow">Мои просмотры</p>
             <h1 class="title">Подключение расширения</h1>
           </div>
         </div>
@@ -33,7 +33,7 @@
                 type="text"
                 inputmode="text"
                 autocomplete="off"
-                placeholder="Например, MT-AB3F-92KQ"
+                placeholder="Например, MT-4821"
                 maxlength="32"
               />
             </label>
@@ -45,47 +45,9 @@
 
           <p id="error-text" class="error hidden" aria-live="assertive"></p>
 
-          <div class="platform-help">
-            <div class="platform-help-header">
-              <p class="platform-help-copy">
-                Чтобы войти в расширение, нужен код подключения. Получите его в профиле
-                на веб-платформе.
-              </p>
-
-              <span class="info-trigger" tabindex="0" aria-label="Пошаговая инструкция">
-                <svg class="info-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                  <circle cx="10" cy="10" r="7.25" stroke="currentColor" stroke-width="1.5" />
-                  <path
-                    d="M10 8V13"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linecap="round"
-                  />
-                  <circle cx="10" cy="5.6" r="1" fill="currentColor" />
-                </svg>
-
-                <span class="info-tooltip" role="tooltip">
-                  <span class="info-tooltip-title">Как получить код</span>
-                  <ol class="info-tooltip-list">
-                    <li>Нажмите «Получить код подключения»</li>
-                    <li>Войдите или зарегистрируйтесь</li>
-                    <li>Скопируйте код из профиля</li>
-                    <li>Вставьте его в расширение</li>
-                  </ol>
-                </span>
-              </span>
-            </div>
-
-            <a
-              id="platform-link-unbound"
-              class="button button-secondary button-link"
-              href="#"
-              target="_blank"
-              rel="noreferrer"
-            >
-              Получить код подключения
-            </a>
-          </div>
+          <a id="platform-link-unbound" class="link" href="#" target="_blank" rel="noreferrer">
+            Открыть веб-платформу
+          </a>
         </section>
 
         <section id="view-bound" class="view hidden">
@@ -93,7 +55,7 @@
             <div class="avatar" id="avatar">MT</div>
             <div class="profile-meta">
               <p id="profile-name" class="profile-name"></p>
-              <p id="profile-username" class="profile-handle"></p>
+              <p id="profile-email" class="profile-email"></p>
             </div>
           </div>
 
