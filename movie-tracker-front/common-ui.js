@@ -1,4 +1,7 @@
 (() => {
+  const DEFAULT_LOCAL_API_BASE_URL = "http://127.0.0.1:8000";
+  const API_BASE_URL_STORAGE_KEY = "movieTracker.apiBaseUrl";
+
   function escapeHtml(value) {
     return String(value)
       .replaceAll("&", "&amp;")
@@ -93,6 +96,64 @@
     textarea.style.height = "auto";
     textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`;
     textarea.style.overflowY = textarea.scrollHeight > maxHeight ? "auto" : "hidden";
+  }
+
+  function normalizeApiBaseUrl(value) {
+    return String(value || "")
+      .trim()
+      .replace(/\/+$/, "");
+  }
+
+  function persistApiBaseUrl(apiBaseUrl) {
+    if (!apiBaseUrl) return;
+
+    try {
+      localStorage.setItem(API_BASE_URL_STORAGE_KEY, apiBaseUrl);
+    } catch (error) {
+      console.warn(error);
+    }
+  }
+
+  function readStoredApiBaseUrl() {
+    try {
+      return normalizeApiBaseUrl(localStorage.getItem(API_BASE_URL_STORAGE_KEY));
+    } catch (error) {
+      console.warn(error);
+      return "";
+    }
+  }
+
+  function resolveApiBaseUrl() {
+    const url = new URL(window.location.href);
+    const queryValue = normalizeApiBaseUrl(url.searchParams.get("apiBaseUrl"));
+    if (queryValue) {
+      persistApiBaseUrl(queryValue);
+      return queryValue;
+    }
+
+    const metaValue = normalizeApiBaseUrl(
+      document.querySelector('meta[name="movie-tracker-api-base-url"]')?.content,
+    );
+    if (metaValue) {
+      persistApiBaseUrl(metaValue);
+      return metaValue;
+    }
+
+    const globalValue = normalizeApiBaseUrl(window.MOVIE_TRACKER_API_BASE_URL);
+    if (globalValue) {
+      persistApiBaseUrl(globalValue);
+      return globalValue;
+    }
+
+    return readStoredApiBaseUrl() || DEFAULT_LOCAL_API_BASE_URL;
+  }
+
+  function getApiConfigurationError(apiBaseUrl = resolveApiBaseUrl()) {
+    if (window.location.protocol === "https:" && apiBaseUrl.startsWith("http://")) {
+      return `На GitHub Pages нужен HTTPS-адрес backend API. Сейчас фронт настроен на ${apiBaseUrl}. Добавьте ?apiBaseUrl=https://ваш-backend или сохраните его в localStorage по ключу movieTracker.apiBaseUrl.`;
+    }
+
+    return "";
   }
 
   const pageScriptCache = new Map();
@@ -415,7 +476,9 @@
   window.MovieTrackerUI = {
     autoSizeTextarea,
     escapeHtml,
+    getApiConfigurationError,
     navigateToPage,
+    resolveApiBaseUrl,
     renderModalShell,
     renderTabs,
     renderToasts,

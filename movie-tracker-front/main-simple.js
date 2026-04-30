@@ -10,11 +10,9 @@ const landingContent = {
   footerYear: "2026",
 };
 
-const API_BASE_URL = "http://127.0.0.1:8000";
-const API_V1_BASE_URL = `${API_BASE_URL}/api/v1`;
-const REGISTER_ENDPOINT = `${API_V1_BASE_URL}/auth/register`;
-const LOGIN_ENDPOINT = `${API_V1_BASE_URL}/auth/login`;
 const CURRENT_USER_STORAGE_KEY = "movieTracker.currentUser";
+const API_BASE_URL_STORAGE_KEY = "movieTracker.apiBaseUrl";
+const DEFAULT_LOCAL_API_BASE_URL = "http://127.0.0.1:8000";
 const DEFAULT_DISPLAY_NAME = "Пользователь";
 const AUTH_TEMPORARY_ERROR_MESSAGE = "произошла ошибка, скоро все заработает";
 
@@ -335,6 +333,68 @@ function getRegisterPayload(formData) {
   };
 }
 
+function normalizeApiBaseUrl(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\/+$/, "");
+}
+
+function persistApiBaseUrl(apiBaseUrl) {
+  if (!apiBaseUrl) return;
+
+  try {
+    localStorage.setItem(API_BASE_URL_STORAGE_KEY, apiBaseUrl);
+  } catch (error) {
+    console.warn(error);
+  }
+}
+
+function resolveApiBaseUrl() {
+  const url = new URL(window.location.href);
+  const queryValue = normalizeApiBaseUrl(url.searchParams.get("apiBaseUrl"));
+  if (queryValue) {
+    persistApiBaseUrl(queryValue);
+    return queryValue;
+  }
+
+  const metaValue = normalizeApiBaseUrl(
+    document.querySelector('meta[name="movie-tracker-api-base-url"]')?.content,
+  );
+  if (metaValue) {
+    persistApiBaseUrl(metaValue);
+    return metaValue;
+  }
+
+  try {
+    const storedValue = normalizeApiBaseUrl(localStorage.getItem(API_BASE_URL_STORAGE_KEY));
+    if (storedValue) return storedValue;
+  } catch (error) {
+    console.warn(error);
+  }
+
+  return DEFAULT_LOCAL_API_BASE_URL;
+}
+
+function getApiConfigurationError(apiBaseUrl = resolveApiBaseUrl()) {
+  if (window.location.protocol === "https:" && apiBaseUrl.startsWith("http://")) {
+    return `На GitHub Pages нужен HTTPS-адрес backend API. Сейчас фронт настроен на ${apiBaseUrl}. Добавьте ?apiBaseUrl=https://ваш-backend или сохраните его в localStorage по ключу movieTracker.apiBaseUrl.`;
+  }
+
+  return "";
+}
+
+function getApiV1BaseUrl() {
+  return `${resolveApiBaseUrl()}/api/v1`;
+}
+
+function getRegisterEndpoint() {
+  return `${getApiV1BaseUrl()}/auth/register`;
+}
+
+function getLoginEndpoint() {
+  return `${getApiV1BaseUrl()}/auth/login`;
+}
+
 function getLoginFromEmail(email) {
   return email.split("@")[0] || "user";
 }
@@ -361,6 +421,11 @@ function saveCurrentUser(user) {
 }
 
 async function sendAuthRequest(endpoint, payload) {
+  const configurationError = getApiConfigurationError();
+  if (configurationError) {
+    throw new AuthRequestError(configurationError);
+  }
+
   const response = await fetch(endpoint, {
     method: "POST",
     credentials: "include",
@@ -454,7 +519,7 @@ async function handleAuthSubmit(event) {
           identifier: String(formData.identifier ?? "").trim(),
           password: String(formData.password ?? ""),
         };
-    const endpoint = type === "register" ? REGISTER_ENDPOINT : LOGIN_ENDPOINT;
+    const endpoint = type === "register" ? getRegisterEndpoint() : getLoginEndpoint();
     const responseData = await sendAuthRequest(endpoint, payload);
     const fallbackIdentifier = payload.email ?? payload.identifier;
 

@@ -7,10 +7,6 @@ const {
   renderToasts,
 } = window.MovieTrackerUI;
 
-const API_BASE_URL = "http://127.0.0.1:8000";
-const API_V1_BASE_URL = `${API_BASE_URL}/api/v1`;
-const WATCH_ITEMS_ENDPOINT = `${API_V1_BASE_URL}/library/watch-items`;
-const FOLDERS_ENDPOINT = `${API_V1_BASE_URL}/library/folders`;
 const ACCESS_TOKEN_STORAGE_KEY = "movieTracker.accessToken";
 
 const initialState = {
@@ -38,13 +34,13 @@ const initialState = {
 
 const movieDetailApi = {
   async fetchMovie(id) {
-    return requestJson(`${WATCH_ITEMS_ENDPOINT}/${encodeURIComponent(id)}`);
+    return requestJson(`${getWatchItemsEndpoint()}/${encodeURIComponent(id)}`);
   },
   async fetchFolders() {
-    return requestJson(FOLDERS_ENDPOINT);
+    return requestJson(getFoldersEndpoint());
   },
   async updateMovie(id, patch) {
-    return requestJson(`${WATCH_ITEMS_ENDPOINT}/${encodeURIComponent(id)}`, {
+    return requestJson(`${getWatchItemsEndpoint()}/${encodeURIComponent(id)}`, {
       method: "PATCH",
       body: patch,
     });
@@ -76,7 +72,24 @@ function readAccessToken() {
   }
 }
 
+function getApiV1BaseUrl() {
+  return `${window.MovieTrackerUI.resolveApiBaseUrl()}/api/v1`;
+}
+
+function getWatchItemsEndpoint() {
+  return `${getApiV1BaseUrl()}/library/watch-items`;
+}
+
+function getFoldersEndpoint() {
+  return `${getApiV1BaseUrl()}/library/folders`;
+}
+
 async function requestJson(url, options = {}) {
+  const configurationError = window.MovieTrackerUI.getApiConfigurationError();
+  if (configurationError) {
+    throw new Error(configurationError);
+  }
+
   const token = readAccessToken();
   if (!token) {
     throw new Error("Чтобы открыть карточку, сначала войдите в аккаунт.");

@@ -8,9 +8,6 @@ const {
   writeClipboardText,
 } = window.MovieTrackerUI;
 
-const API_BASE_URL = "http://127.0.0.1:8000";
-const API_V1_BASE_URL = `${API_BASE_URL}/api/v1`;
-const FOLDERS_ENDPOINT = `${API_V1_BASE_URL}/library/folders`;
 const ACCESS_TOKEN_STORAGE_KEY = "movieTracker.accessToken";
 
 const initialState = {
@@ -37,10 +34,10 @@ const initialState = {
 
 const foldersApi = {
   async fetchFolders() {
-    return requestJson(FOLDERS_ENDPOINT);
+    return requestJson(getFoldersEndpoint());
   },
   async deleteFolder(id) {
-    return requestJson(`${FOLDERS_ENDPOINT}/${encodeURIComponent(id)}`, {
+    return requestJson(`${getFoldersEndpoint()}/${encodeURIComponent(id)}`, {
       method: "DELETE",
     });
   },
@@ -70,7 +67,20 @@ function readAccessToken() {
   }
 }
 
+function getApiV1BaseUrl() {
+  return `${window.MovieTrackerUI.resolveApiBaseUrl()}/api/v1`;
+}
+
+function getFoldersEndpoint() {
+  return `${getApiV1BaseUrl()}/library/folders`;
+}
+
 async function requestJson(url, options = {}) {
+  const configurationError = window.MovieTrackerUI.getApiConfigurationError();
+  if (configurationError) {
+    throw new Error(configurationError);
+  }
+
   const token = readAccessToken();
   if (!token) {
     throw new Error("Чтобы открыть папки, сначала войдите в аккаунт.");
