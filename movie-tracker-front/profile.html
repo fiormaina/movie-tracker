@@ -3,15 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Movie Tracker</title>
-    <script>
-      (() => {
-        const nextUrl = new URL("./pages/profile.html", window.location.href);
-        nextUrl.search = window.location.search;
-        nextUrl.hash = window.location.hash;
-        window.location.replace(nextUrl.href);
-      })();
-    </script>
+    <title>Movie Tracker · Профиль</title>
+    <link rel="stylesheet" href="./watch-history.css" />
+    <link rel="stylesheet" href="./folders.css" />
+    <link rel="stylesheet" href="./profile.css" />
   </head>
-  <body></body>
+  <body>
+    <main id="profile-app"></main>
+    <script src="./common-ui.js"></script>
+    <script src="./profile.js"></script>
+  </body>
 </html>
