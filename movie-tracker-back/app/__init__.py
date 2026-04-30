@@ -1,0 +1,1 @@
+"""Movie Tracker backend application."""
