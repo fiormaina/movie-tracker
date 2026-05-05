@@ -375,8 +375,24 @@ function resolveApiBaseUrl() {
   return DEFAULT_LOCAL_API_BASE_URL;
 }
 
+function isLoopbackHttpApiBaseUrl(apiBaseUrl) {
+  try {
+    const parsedUrl = new URL(apiBaseUrl);
+    return (
+      parsedUrl.protocol === "http:" &&
+      ["127.0.0.1", "localhost", "[::1]", "::1"].includes(parsedUrl.hostname)
+    );
+  } catch (error) {
+    return false;
+  }
+}
+
 function getApiConfigurationError(apiBaseUrl = resolveApiBaseUrl()) {
-  if (window.location.protocol === "https:" && apiBaseUrl.startsWith("http://")) {
+  if (
+    window.location.protocol === "https:" &&
+    apiBaseUrl.startsWith("http://") &&
+    !isLoopbackHttpApiBaseUrl(apiBaseUrl)
+  ) {
     return `На GitHub Pages нужен HTTPS-адрес backend API. Сейчас фронт настроен на ${apiBaseUrl}. Добавьте ?apiBaseUrl=https://ваш-backend или сохраните его в localStorage по ключу movieTracker.apiBaseUrl.`;
   }
 
