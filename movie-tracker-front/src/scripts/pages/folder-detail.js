@@ -10,15 +10,23 @@
     addItemToFolder,
     currentUser,
     deleteFolder,
+    fetchFolderView,
+    fetchMediaItem,
+    fetchRecentMedia,
+    getMediaItem,
     getFolderView,
-    moveItem,
+    getRecentMedia,
     removeItemFromFolder,
     saveFolder,
     searchMedia,
+    searchMediaRemote,
     unsaveFolder,
     updateFolder,
   } = window.MovieTrackerFolders;
   const routes = window.MovieTrackerRoutes;
+  const PENDING_SEARCH_KEY = "movieTracker.openFolderSearch";
+  const PENDING_FOLDER_SOURCE_KEY = "movieTracker.pendingFolderSource";
+  const RECENT_CONTENT_LIMIT = 5;
 
   const initialState = {
     tabs: createPrimaryTabs("folders"),
@@ -29,12 +37,15 @@
     form: {
       title: "",
       description: "",
+      visibility: "private",
     },
     errors: {},
     search: {
-      open: false,
+      open: true,
+      activated: false,
       query: "",
       loading: false,
+      recentItems: [],
       results: [],
       touched: false,
     },
@@ -46,6 +57,7 @@
   let state = cloneState(initialState);
   let rootElement = null;
   let searchTimer = 0;
+  let searchRequestToken = 0;
   const showToast = createToastController(setState);
 
   function cloneState(value) {
@@ -57,6 +69,7 @@
       errors: { ...value.errors },
       search: {
         ...value.search,
+        recentItems: value.search.recentItems.map((item) => ({ ...item })),
         results: value.search.results.map((item) => ({ ...item })),
       },
       toasts: [...value.toasts],
@@ -152,19 +165,34 @@
 
   function renderFolderActions(folder) {
     if (folder.role === "owner") {
+      const editButton = state.editMode
+        ? ""
+        : `
+          <button class="profile-button" type="button" data-action="toggle-edit">
+            <svg width="16" height="16" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+              <path d="M10.9 4.2L13.8 7.1M3.8 14.2L6.9 13.55L14.3 6.15C15.1 5.35 15.1 4.05 14.3 3.25C13.5 2.45 12.2 2.45 11.4 3.25L4 10.65L3.8 14.2Z" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+            Редактировать
+          </button>
+        `;
+
       return `
         <div class="folder-detail__actions">
-          <button class="profile-button" type="button" data-action="toggle-search">
-            ${state.search.open ? "Скрыть добавление" : "Добавить фильм или сериал"}
+          ${editButton}
+          <button class="profile-button" type="button" data-action="copy-link">
+            <svg width="16" height="16" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+              <path d="M7.4 10.6C6.25 9.45 6.25 7.6 7.4 6.45L9.65 4.2C10.8 3.05 12.65 3.05 13.8 4.2C14.95 5.35 14.95 7.2 13.8 8.35L12.78 9.37" stroke="currentColor" stroke-width="1.55" stroke-linecap="round"></path>
+              <path d="M10.6 7.4C11.75 8.55 11.75 10.4 10.6 11.55L8.35 13.8C7.2 14.95 5.35 14.95 4.2 13.8C3.05 12.65 3.05 10.8 4.2 9.65L5.22 8.63" stroke="currentColor" stroke-width="1.55" stroke-linecap="round"></path>
+            </svg>
+            Копировать ссылку
           </button>
-          <button class="profile-button" type="button" data-action="toggle-edit">
-            ${state.editMode ? "Свернуть редактирование" : "Редактировать"}
+          <button class="profile-button" type="button" data-action="delete-folder" ${state.pendingAction ? "disabled" : ""}>
+            <svg width="16" height="16" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+              <path d="M4.2 5.6H13.8" stroke="currentColor" stroke-width="1.55" stroke-linecap="round"></path>
+              <path d="M7.2 3.8H10.8M6 5.6L6.45 14.1C6.49 14.73 7 15.2 7.63 15.2H10.37C11 15.2 11.51 14.73 11.55 14.1L12 5.6" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+            Удалить папку
           </button>
-          <button class="profile-button" type="button" data-action="toggle-privacy" ${state.pendingAction ? "disabled" : ""}>
-            ${folder.isPublic ? "Сделать приватной" : "Сделать публичной"}
-          </button>
-          ${folder.isPublic ? `<button class="profile-button" type="button" data-action="copy-link">Копировать ссылку</button>` : ""}
-          <button class="profile-button" type="button" data-action="delete-folder" ${state.pendingAction ? "disabled" : ""}>Удалить папку</button>
         </div>
       `;
     }
@@ -172,15 +200,33 @@
     if (folder.role === "saved") {
       return `
         <div class="folder-detail__actions">
-          <button class="profile-button" type="button" data-action="copy-link" ${folder.isPublic ? "" : "disabled"}>Копировать ссылку</button>
-          <button class="profile-button" type="button" data-action="unsave-folder" ${state.pendingAction ? "disabled" : ""}>Удалить из сохраненных</button>
+          <button class="profile-button" type="button" data-action="copy-link">
+            <svg width="16" height="16" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+              <path d="M7.4 10.6C6.25 9.45 6.25 7.6 7.4 6.45L9.65 4.2C10.8 3.05 12.65 3.05 13.8 4.2C14.95 5.35 14.95 7.2 13.8 8.35L12.78 9.37" stroke="currentColor" stroke-width="1.55" stroke-linecap="round"></path>
+              <path d="M10.6 7.4C11.75 8.55 11.75 10.4 10.6 11.55L8.35 13.8C7.2 14.95 5.35 14.95 4.2 13.8C3.05 12.65 3.05 10.8 4.2 9.65L5.22 8.63" stroke="currentColor" stroke-width="1.55" stroke-linecap="round"></path>
+            </svg>
+            Копировать ссылку
+          </button>
+          <button class="profile-button" type="button" data-action="unsave-folder" ${state.pendingAction ? "disabled" : ""}>
+            <svg width="16" height="16" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+              <path d="M4.2 5.6H13.8" stroke="currentColor" stroke-width="1.55" stroke-linecap="round"></path>
+              <path d="M7.2 3.8H10.8M6 5.6L6.45 14.1C6.49 14.73 7 15.2 7.63 15.2H10.37C11 15.2 11.51 14.73 11.55 14.1L12 5.6" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+            Удалить из сохраненных
+          </button>
         </div>
       `;
     }
 
     return `
       <div class="folder-detail__actions">
-        <button class="profile-button" type="button" data-action="copy-link" ${folder.isPublic ? "" : "disabled"}>Копировать ссылку</button>
+        <button class="profile-button" type="button" data-action="copy-link">
+          <svg width="16" height="16" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+            <path d="M7.4 10.6C6.25 9.45 6.25 7.6 7.4 6.45L9.65 4.2C10.8 3.05 12.65 3.05 13.8 4.2C14.95 5.35 14.95 7.2 13.8 8.35L12.78 9.37" stroke="currentColor" stroke-width="1.55" stroke-linecap="round"></path>
+            <path d="M10.6 7.4C11.75 8.55 11.75 10.4 10.6 11.55L8.35 13.8C7.2 14.95 5.35 14.95 4.2 13.8C3.05 12.65 3.05 10.8 4.2 9.65L5.22 8.63" stroke="currentColor" stroke-width="1.55" stroke-linecap="round"></path>
+          </svg>
+          Копировать ссылку
+        </button>
         <button class="profile-button profile-button--primary" type="button" data-action="save-folder" ${state.pendingAction ? "disabled" : ""}>Сохранить себе</button>
       </div>
     `;
@@ -199,9 +245,30 @@
         <label class="folder-detail__field">
           <span class="folder-detail__label">Описание</span>
           <textarea class="folder-detail__textarea" data-edit-field="description" ${state.pendingAction ? "disabled" : ""}>${escapeHtml(state.form.description)}</textarea>
-          <span class="folder-detail__field-hint">Описание помогает понять замысел подборки и особенно полезно для публичной папки.</span>
           ${state.errors.description ? `<span class="folder-detail__error">${escapeHtml(state.errors.description)}</span>` : ""}
         </label>
+        <div class="folder-detail__field">
+          <span class="folder-detail__label">Доступ</span>
+          <div class="folder-detail__switch">
+            <button
+              class="folder-detail__switch-button ${state.form.visibility === "private" ? "folder-detail__switch-button--active" : ""}"
+              type="button"
+              data-edit-visibility="private"
+              ${state.pendingAction ? "disabled" : ""}
+            >
+              Личная
+            </button>
+            <button
+              class="folder-detail__switch-button ${state.form.visibility === "public" ? "folder-detail__switch-button--active" : ""}"
+              type="button"
+              data-edit-visibility="public"
+              ${state.pendingAction ? "disabled" : ""}
+            >
+              Публичная
+            </button>
+          </div>
+          ${state.errors.visibility ? `<span class="folder-detail__error">${escapeHtml(state.errors.visibility)}</span>` : ""}
+        </div>
         <div class="folder-detail__edit-actions">
           <button class="profile-button" type="button" data-action="cancel-edit" ${state.pendingAction ? "disabled" : ""}>Отмена</button>
           <button class="profile-button profile-button--primary" type="button" data-action="save-edit" ${state.pendingAction ? "disabled" : ""}>
@@ -212,20 +279,10 @@
     `;
   }
 
-  function renderNotice(folder) {
-    if (!folder.linkedNotice) return "";
-
-    return `
-      <section class="folder-detail__notice" aria-label="Подсказка о режиме папки">
-        <strong>${folder.role === "saved" ? "Связано с оригиналом" : "Что произойдет при сохранении"}</strong>
-        <p class="folder-detail__hint">${escapeHtml(folder.linkedNotice)}</p>
-      </section>
-    `;
-  }
-
   function renderSearchResult(result, folder) {
     const exists = folder.items.some((item) => item.id === result.id);
-    const buttonLabel = exists ? "Уже в папке" : "Добавить";
+    const isPendingAdd = state.pendingAction === `add-item:${result.id}`;
+    const buttonLabel = exists ? "Уже в папке" : isPendingAdd ? "Добавляем..." : "Добавить";
 
     return `
       <article class="folder-detail__result">
@@ -240,7 +297,7 @@
           <p class="folder-detail__result-meta">${escapeHtml(result.meta)}</p>
         </div>
         <div class="folder-detail__search-actions">
-          <button class="profile-button ${exists ? "" : "profile-button--primary"}" type="button" data-action="add-item" data-id="${result.id}" ${state.pendingAction ? "disabled" : ""}>
+          <button class="profile-button ${exists ? "" : "profile-button--primary"}" type="button" data-action="add-item" data-id="${result.id}" ${(exists || state.pendingAction) ? "disabled" : ""}>
             ${buttonLabel}
           </button>
         </div>
@@ -249,25 +306,55 @@
   }
 
   function renderSearchPanel(folder) {
-    if (folder.role !== "owner" || !state.search.open) return "";
+    if (folder.role !== "owner") return "";
 
-    let content = `<p class="folder-detail__section-text">Начните вводить название, чтобы добавить фильм или сериал из существующей библиотеки.</p>`;
+    const hasQuery = Boolean(state.search.query.trim());
+    const shouldShowRecent = state.search.activated && !hasQuery;
+    const recentItems = shouldShowRecent ? state.search.recentItems : [];
+    let content = "";
+
     if (state.search.loading) {
-      content = `<p class="folder-detail__section-text">Ищем по системе...</p>`;
-    } else if (state.search.touched && !state.search.results.length) {
+      content = `<p class="folder-detail__search-state">Ищем...</p>`;
+    } else if (hasQuery && state.search.touched && !state.search.results.length) {
       content = `<div class="folder-detail__empty"><div class="folder-detail__empty-icon" aria-hidden="true"></div><strong>Поиск ничего не нашел</strong><p class="folder-detail__hint">Попробуйте другое название или уточните запрос.</p></div>`;
-    } else if (state.search.results.length) {
-      content = `<div class="folder-detail__search-results">${state.search.results.map((item) => renderSearchResult(item, folder)).join("")}</div>`;
+    } else if (hasQuery) {
+      content = `
+        <div class="folder-detail__search-results">${state.search.results.map((item) => renderSearchResult(item, folder)).join("")}</div>
+      `;
+    } else if (shouldShowRecent) {
+      content = recentItems.length
+        ? `
+          <div class="folder-detail__search-group">
+            <h3 class="folder-detail__search-title">Недавно просмотренное</h3>
+            <div class="folder-detail__search-results">${recentItems.map((item) => renderSearchResult(item, folder)).join("")}</div>
+          </div>
+        `
+        : `<p class="folder-detail__search-state">Недавно просмотренного пока нет.</p>`;
     }
 
     return `
-      <section class="folder-detail__search" aria-label="Добавление контента в папку">
-        <div>
-          <h2 class="folder-detail__section-title">Добавить в папку</h2>
-          <p class="folder-detail__section-text">Работает через поиск внутри системы и синхронизируется с кнопкой «Добавить в папку» на карточках фильмов и сериалов.</p>
+      <div class="folder-detail__search" aria-label="Добавление контента в папку">
+        <div class="folder-detail__search-field">
+          <input class="folder-detail__search-input" type="text" value="${escapeHtml(state.search.query)}" placeholder="Поиск" data-search-input ${state.pendingAction ? "disabled" : ""} />
+          <span class="folder-detail__search-icon" aria-hidden="true">
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+              <circle cx="6.5" cy="6.5" r="5" stroke="currentColor" stroke-width="1.5"></circle>
+              <path d="M10.5 10.5L14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+            </svg>
+          </span>
         </div>
-        <input class="folder-detail__search-input" type="text" value="${escapeHtml(state.search.query)}" placeholder="Поиск по названиям" data-search-input ${state.pendingAction ? "disabled" : ""} />
         ${content}
+      </div>
+    `;
+  }
+
+  function renderAddSection(folder) {
+    if (folder.role !== "owner") return "";
+
+    return `
+      <section class="folder-detail__add">
+        <h2 class="folder-detail__section-title">Добавить</h2>
+        ${renderSearchPanel(folder)}
       </section>
     `;
   }
@@ -276,16 +363,6 @@
     const ownerControls = folder.role === "owner"
       ? `
         <div class="folder-detail__item-actions">
-          <button class="folder-detail__icon-button" type="button" data-action="move-up" data-id="${item.id}" ${item.index === 0 || state.pendingAction ? "disabled" : ""} aria-label="Поднять выше">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-              <path d="M9 13.5V4.5M9 4.5L5.4 8.1M9 4.5L12.6 8.1" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path>
-            </svg>
-          </button>
-          <button class="folder-detail__icon-button" type="button" data-action="move-down" data-id="${item.id}" ${item.index === folder.items.length - 1 || state.pendingAction ? "disabled" : ""} aria-label="Опустить ниже">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-              <path d="M9 4.5V13.5M9 13.5L5.4 9.9M9 13.5L12.6 9.9" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"></path>
-            </svg>
-          </button>
           <button class="folder-detail__icon-button folder-detail__icon-button--danger" type="button" data-action="remove-item" data-id="${item.id}" ${state.pendingAction ? "disabled" : ""} aria-label="Удалить из папки">
             <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
               <path d="M4.2 5.6H13.8" stroke="currentColor" stroke-width="1.55" stroke-linecap="round"></path>
@@ -316,14 +393,10 @@
   }
 
   function renderItemsSection(folder) {
-    const description = folder.role === "owner"
-      ? "Здесь можно менять порядок, удалять позиции и дополнять папку без дубликатов."
-      : "Содержимое папки доступно только для просмотра. Управление остается у владельца оригинала.";
-
     const emptyTitle = folder.role === "owner" ? "Папка пока пустая" : "В этой папке пока ничего нет";
     const emptyText = folder.role === "owner"
-      ? "Добавьте фильмы или сериалы через поиск выше либо из карточек контента по кнопке «Добавить в папку»."
-      : "Владелец еще не добавил элементы в папку или очистил подборку.";
+      ? "Добавьте фильмы или сериалы."
+      : "Папка пока пустая.";
 
     const listContent = folder.items.length
       ? `<div class="folder-detail__items">${folder.items.map((item) => renderItem(item, folder)).join("")}</div>`
@@ -343,12 +416,8 @@
     return `
       <section class="folder-detail__section">
         <div class="folder-detail__section-head">
-          <div>
-            <h2 class="folder-detail__section-title">Содержимое папки</h2>
-            <p class="folder-detail__section-text">${description}</p>
-          </div>
+          <h2 class="folder-detail__section-title">Содержимое</h2>
         </div>
-        ${renderSearchPanel(folder)}
         ${listContent}
       </section>
     `;
@@ -379,21 +448,24 @@
   function renderFolder() {
     const folder = state.folder;
     if (!folder) return renderUnavailableState();
+    const description = folder.description
+      ? `<p class="folder-detail__description">${escapeHtml(folder.description)}</p>`
+      : "";
 
     return `
-      ${renderNotice(folder)}
       <section class="folder-detail__hero">
         <div class="folder-detail__hero-top">
           <div>
             <span class="folder-detail__eyebrow">${folder.role === "owner" ? "Моя папка" : folder.role === "saved" ? "Сохраненная папка" : "Публичная папка"}</span>
             <h1 class="folder-detail__title">${escapeHtml(folder.title)}</h1>
-            <p class="folder-detail__description">${escapeHtml(folder.description || "Описание пока не добавлено.")}</p>
+            ${description}
           </div>
           ${renderFolderActions(folder)}
         </div>
         ${renderMeta(folder)}
         ${renderEditForm(folder)}
       </section>
+      ${renderAddSection(folder)}
       ${renderItemsSection(folder)}
     `;
   }
@@ -440,6 +512,7 @@
   function syncEditForm(folder) {
     state.form.title = folder.title;
     state.form.description = folder.description;
+    state.form.visibility = folder.isPublic ? "public" : "private";
     state.errors = {};
   }
 
@@ -452,7 +525,7 @@
     }));
   }
 
-  function loadFolder() {
+  async function loadFolder() {
     const route = getRouteParams();
 
     setState((currentState) => ({
@@ -463,54 +536,87 @@
       pendingAction: "",
     }));
 
-    window.setTimeout(() => {
-      try {
-        const result = getFolderView({
-          folderId: route.folderId,
-          publicSlug: route.publicSlug,
-          viewerId: currentUser.id,
-        });
+    try {
+      const result = await fetchFolderView({
+        folderId: route.folderId,
+        publicSlug: route.publicSlug,
+        viewerId: currentUser.id,
+      });
 
-        if (result.status === "ok") {
-          setState((currentState) => ({
-            ...currentState,
-            status: "ok",
-            folder: result.folder,
-            editMode: false,
-            errors: {},
-            search: {
-              ...currentState.search,
-              open: result.folder.role === "owner" ? currentState.search.open : false,
-              loading: false,
-              results: [],
-              query: "",
-              touched: false,
-            },
-          }));
-          syncEditForm(result.folder);
-          renderApp();
-          return;
+      if (result.status === "ok") {
+        const shouldOpenSearch = consumePendingSearch(result.folder.id);
+        const pendingSource = consumePendingFolderSource(result.folder.id);
+        setState((currentState) => ({
+          ...currentState,
+          status: "ok",
+          folder: result.folder,
+          editMode: false,
+          errors: {},
+          search: {
+            ...currentState.search,
+            open: result.folder.role === "owner",
+            activated: result.folder.role === "owner" ? Boolean(shouldOpenSearch || pendingSource?.title) : false,
+            loading: false,
+            recentItems: [],
+            results: [],
+            query: pendingSource?.title ?? "",
+            touched: Boolean(pendingSource?.title),
+          },
+        }));
+        syncEditForm(result.folder);
+        renderApp();
+        if (result.folder.role === "owner") {
+          hydrateRecentMedia();
         }
-
-        setState((currentState) => ({
-          ...currentState,
-          status: result.status,
-          folder: null,
-        }));
-      } catch (error) {
-        console.error(error);
-        setState((currentState) => ({
-          ...currentState,
-          status: "error",
-          errorMessage: error.message,
-          folder: null,
-        }));
+        if (shouldOpenSearch || pendingSource?.title) {
+          window.requestAnimationFrame(restoreSearchFocus);
+        }
+        if (pendingSource) {
+          resolvePendingFolderSource(result.folder.id, pendingSource);
+        }
+        return;
       }
-    }, 220);
+
+      setState((currentState) => ({
+        ...currentState,
+        status: result.status,
+        folder: null,
+      }));
+    } catch (error) {
+      console.error(error);
+      setState((currentState) => ({
+        ...currentState,
+        status: "error",
+        errorMessage: error.message,
+        folder: null,
+      }));
+    }
   }
 
   function storePendingToast(message, type = "success") {
     window.sessionStorage.setItem("movieTracker.pendingFolderToast", JSON.stringify({ message, type }));
+  }
+
+  async function hydrateRecentMedia() {
+    try {
+      const recentItems = await fetchRecentMedia(RECENT_CONTENT_LIMIT);
+      setState((currentState) => ({
+        ...currentState,
+        search: {
+          ...currentState.search,
+          recentItems: Array.isArray(recentItems) ? recentItems.map((item) => ({ ...item })) : getRecentMedia(RECENT_CONTENT_LIMIT),
+        },
+      }));
+    } catch (error) {
+      console.error(error);
+      setState((currentState) => ({
+        ...currentState,
+        search: {
+          ...currentState.search,
+          recentItems: getRecentMedia(RECENT_CONTENT_LIMIT),
+        },
+      }));
+    }
   }
 
   function openDeleteOverlay() {
@@ -555,7 +661,7 @@
       const folder = await updateFolder(state.folder.id, {
         title: state.form.title,
         description: state.form.description,
-        visibility: state.folder.isPublic ? "public" : "private",
+        visibility: state.form.visibility,
       });
       setState((currentState) => ({
         ...currentState,
@@ -583,42 +689,8 @@
     }
   }
 
-  async function togglePrivacy() {
-    if (!state.folder || state.folder.role !== "owner" || state.pendingAction) return;
-
-    setState((currentState) => ({
-      ...currentState,
-      pendingAction: "toggle-privacy",
-    }));
-
-    try {
-      const folder = await updateFolder(state.folder.id, {
-        title: state.folder.title,
-        description: state.folder.description,
-        visibility: state.folder.isPublic ? "private" : "public",
-      });
-      setState((currentState) => ({
-        ...currentState,
-        folder,
-        pendingAction: "",
-      }));
-      syncEditForm(folder);
-      showToast("Изменения сохранены", "success");
-    } catch (error) {
-      console.error(error);
-      setState((currentState) => ({
-        ...currentState,
-        pendingAction: "",
-      }));
-      showToast("Ошибка доступа", "error");
-    }
-  }
-
   async function copyLink() {
-    if (!state.folder?.publicUrl) {
-      showToast("Папка недоступна по ссылке", "error");
-      return;
-    }
+    if (!state.folder?.publicUrl) return;
 
     try {
       await writeClipboardText(state.folder.publicUrl);
@@ -709,44 +781,113 @@
     }
   }
 
-  function toggleSearch() {
-    if (!state.folder || state.folder.role !== "owner") return;
-
-    setState((currentState) => ({
-      ...currentState,
-      search: {
-        ...currentState.search,
-        open: !currentState.search.open,
-      },
-    }));
-  }
-
   function runSearch(query) {
     window.clearTimeout(searchTimer);
+    const hasQuery = Boolean(query.trim());
+    const requestToken = ++searchRequestToken;
 
     setState((currentState) => ({
       ...currentState,
       search: {
         ...currentState.search,
         query,
-        loading: Boolean(query.trim()),
-        touched: Boolean(query.trim()),
+        loading: hasQuery,
+        touched: hasQuery,
+        activated: currentState.search.activated || hasQuery,
+        results: hasQuery ? currentState.search.results : [],
       },
     }));
     window.requestAnimationFrame(restoreSearchFocus);
 
+    if (!hasQuery) {
+      return;
+    }
+
     searchTimer = window.setTimeout(() => {
-      const results = query.trim() ? searchMedia(query) : [];
+      searchMediaRemote(query)
+        .then((results) => {
+          if (requestToken !== searchRequestToken) return;
+
+          setState((currentState) => ({
+            ...currentState,
+            search: {
+              ...currentState.search,
+              loading: false,
+              results: Array.isArray(results) ? results.map((item) => ({ ...item })) : searchMedia(query),
+            },
+          }));
+          window.requestAnimationFrame(restoreSearchFocus);
+        })
+        .catch((error) => {
+          console.error(error);
+          if (requestToken !== searchRequestToken) return;
+
+          setState((currentState) => ({
+            ...currentState,
+            search: {
+              ...currentState.search,
+              loading: false,
+              results: searchMedia(query),
+            },
+          }));
+          window.requestAnimationFrame(restoreSearchFocus);
+        });
+    }, 180);
+  }
+
+  function consumePendingFolderSource(folderId) {
+    const rawValue = window.sessionStorage.getItem(PENDING_FOLDER_SOURCE_KEY);
+    if (!rawValue) return null;
+
+    try {
+      const parsedValue = JSON.parse(rawValue);
+      if (parsedValue?.folderId === folderId) {
+        window.sessionStorage.removeItem(PENDING_FOLDER_SOURCE_KEY);
+        return parsedValue;
+      }
+    } catch (error) {
+      console.warn(error);
+      window.sessionStorage.removeItem(PENDING_FOLDER_SOURCE_KEY);
+    }
+
+    return null;
+  }
+
+  async function resolvePendingFolderSource(folderId, source) {
+    const mediaItem = source?.mediaId
+      ? await fetchMediaItem(source.mediaId).catch(() => getMediaItem(source.mediaId))
+      : null;
+
+    if (!source?.mediaId || !mediaItem) {
+      if (source?.title) {
+        runSearch(source.title);
+      }
+      return;
+    }
+
+    setState((currentState) => ({
+      ...currentState,
+      pendingAction: `add-item:${source.mediaId}`,
+    }));
+
+    try {
+      const result = await addItemToFolder(folderId, source.mediaId);
       setState((currentState) => ({
         ...currentState,
-        search: {
-          ...currentState.search,
-          loading: false,
-          results,
-        },
+        folder: result.folder,
+        pendingAction: "",
       }));
-      window.requestAnimationFrame(restoreSearchFocus);
-    }, 180);
+      showToast(result.status === "duplicate" ? "Элемент уже добавлен" : "Добавлено в папку", "success");
+    } catch (error) {
+      console.error(error);
+      setState((currentState) => ({
+        ...currentState,
+        pendingAction: "",
+      }));
+      if (source?.title) {
+        runSearch(source.title);
+      }
+    }
   }
 
   async function handleAddItem(mediaId) {
@@ -786,6 +927,24 @@
     }
   }
 
+  function consumePendingSearch(folderId) {
+    const rawValue = window.sessionStorage.getItem(PENDING_SEARCH_KEY);
+    if (!rawValue) return false;
+
+    try {
+      const parsedValue = JSON.parse(rawValue);
+      if (parsedValue?.folderId === folderId) {
+        window.sessionStorage.removeItem(PENDING_SEARCH_KEY);
+        return true;
+      }
+    } catch (error) {
+      console.warn(error);
+      window.sessionStorage.removeItem(PENDING_SEARCH_KEY);
+    }
+
+    return false;
+  }
+
   async function handleRemoveItem(mediaId) {
     if (!state.folder || state.folder.role !== "owner" || state.pendingAction) return;
 
@@ -809,26 +968,20 @@
     }
   }
 
-  async function handleMoveItem(mediaId, direction) {
-    if (!state.folder || state.folder.role !== "owner" || state.pendingAction) return;
+  function activateSearchPanel() {
+    if (!state.search.open || state.search.activated) return;
 
     setState((currentState) => ({
       ...currentState,
-      pendingAction: `${direction}:${mediaId}`,
+      search: {
+        ...currentState.search,
+        activated: true,
+      },
     }));
-
-    try {
-      const folder = await moveItem(state.folder.id, mediaId, direction);
-      updateFolderInState(folder);
-      showToast("Изменения сохранены", "success");
-    } catch (error) {
-      console.error(error);
-      setState((currentState) => ({
-        ...currentState,
-        pendingAction: "",
-      }));
-      showToast("Ошибка доступа", "error");
+    if (!state.search.recentItems.length) {
+      hydrateRecentMedia();
     }
+    window.requestAnimationFrame(restoreSearchFocus);
   }
 
   function handleRootClick(event) {
@@ -840,6 +993,20 @@
 
     if (event.target.dataset.modalBackdrop === "folder-delete") {
       closeDeleteOverlay();
+      return;
+    }
+
+    const searchInput = event.target.closest("[data-search-input]");
+    if (searchInput) {
+      activateSearchPanel();
+      return;
+    }
+
+    const visibilityButton = event.target.closest("[data-edit-visibility]");
+    if (visibilityButton) {
+      state.form.visibility = visibilityButton.dataset.editVisibility;
+      delete state.errors.visibility;
+      renderApp();
       return;
     }
 
@@ -879,11 +1046,6 @@
       return;
     }
 
-    if (action === "toggle-privacy") {
-      togglePrivacy();
-      return;
-    }
-
     if (action === "copy-link") {
       copyLink();
       return;
@@ -914,11 +1076,6 @@
       return;
     }
 
-    if (action === "toggle-search") {
-      toggleSearch();
-      return;
-    }
-
     if (action === "add-item") {
       handleAddItem(id);
       return;
@@ -927,15 +1084,6 @@
     if (action === "remove-item") {
       handleRemoveItem(id);
       return;
-    }
-
-    if (action === "move-up") {
-      handleMoveItem(id, "up");
-      return;
-    }
-
-    if (action === "move-down") {
-      handleMoveItem(id, "down");
     }
   }
 
@@ -975,6 +1123,11 @@
 
     rootElement.addEventListener("click", handleRootClick);
     rootElement.addEventListener("input", handleRootInput);
+    rootElement.addEventListener("focusin", (event) => {
+      if (event.target.closest("[data-search-input]")) {
+        activateSearchPanel();
+      }
+    });
     renderApp();
     initPendingToast();
     loadFolder();

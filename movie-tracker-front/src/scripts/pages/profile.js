@@ -18,7 +18,9 @@
   const { renderProfileFolderCard } = window.MovieTrackerFolderCard;
   const {
     currentUser,
+    fetchProfileView,
     followUser,
+    getFolderPublicUrl,
     getProfileUrl,
     getProfileView,
     saveFolder,
@@ -281,7 +283,7 @@
     const routeTarget = getRouteTarget();
     const viewer = await resolveViewer();
     const ownRoute = isCurrentUsersRoute(routeTarget, viewer);
-    const profileView = getProfileView({
+    const profileView = await fetchProfileView({
       userId: ownRoute ? viewer.id : "",
       username: ownRoute ? viewer.username : routeTarget,
       viewerId: viewer.id,
@@ -495,7 +497,7 @@
           </span>
           <strong class="profile-connect__code">${escapeHtml(state.user.extensionCode || "MT-USER-2026")}</strong>
         </div>
-        <button class="profile-button profile-button--primary" type="button" data-action="copy-extension-code">
+        <button class="profile-button" type="button" data-action="copy-extension-code">
           <svg width="16" height="16" viewBox="0 0 18 18" fill="none" aria-hidden="true">
             <path d="M6.2 6.2V3.9C6.2 3.3 6.7 2.8 7.3 2.8H14.1C14.7 2.8 15.2 3.3 15.2 3.9V10.7C15.2 11.3 14.7 11.8 14.1 11.8H11.8" stroke="currentColor" stroke-width="1.55" stroke-linejoin="round"></path>
             <path d="M3.9 6.2H10.7C11.3 6.2 11.8 6.7 11.8 7.3V14.1C11.8 14.7 11.3 15.2 10.7 15.2H3.9C3.3 15.2 2.8 14.7 2.8 14.1V7.3C2.8 6.7 3.3 6.2 3.9 6.2Z" stroke="currentColor" stroke-width="1.55" stroke-linejoin="round"></path>
@@ -763,6 +765,19 @@
     } catch (error) {
       console.error(error);
       showToast("Не удалось скопировать код", "error");
+    }
+  }
+
+  async function copyFolderLink(folderId) {
+    const folder = state.publicFolders.find((item) => item.id === folderId);
+    if (!folder) return;
+
+    try {
+      await writeClipboardText(folder.publicUrl || getFolderPublicUrl(folder));
+      showToast("Ссылка скопирована", "success");
+    } catch (error) {
+      console.error(error);
+      showToast("Не удалось скопировать ссылку", "error");
     }
   }
 
@@ -1143,6 +1158,11 @@
 
       if (action === "copy-extension-code") {
         copyExtensionCode();
+        return;
+      }
+
+      if (action === "copy-folder-link") {
+        copyFolderLink(folderId);
         return;
       }
 

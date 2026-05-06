@@ -13,32 +13,12 @@ const {
 } = window.MovieTrackerAppShell;
 const {
   addItemToFolder,
-  getCreateFolderUrl,
   listFolderOptions,
 } = window.MovieTrackerFolders;
+const movieDetailApi = window.MovieTrackerMediaApi;
 const routes = window.MovieTrackerRoutes;
-
-const MOVIE_DETAIL_API_DELAY = 450;
-const MOVIE_DETAIL_API_SHOULD_FAIL = false;
-
-const movieDetailApi = {
-  updateMovie(id, patch) {
-    return new Promise((resolve, reject) => {
-      window.setTimeout(() => {
-        if (MOVIE_DETAIL_API_SHOULD_FAIL) {
-          reject(new Error("Mock API error"));
-          return;
-        }
-
-        resolve({
-          id,
-          ...patch,
-          updatedAt: new Date().toISOString(),
-        });
-      }, MOVIE_DETAIL_API_DELAY);
-    });
-  },
-};
+const OPEN_CREATE_MODAL_KEY = "movieTracker.openCreateFolderModal";
+const PENDING_CREATE_SOURCE_KEY = "movieTracker.pendingCreateFolderSource";
 
 const initialMovie = {
   id: "movie-detail-1",
@@ -443,6 +423,24 @@ function renderApp() {
   rootElement.innerHTML = renderPage();
 }
 
+async function hydrateMovieDetail() {
+  try {
+    const movie = await movieDetailApi.getMovieDetail(state.movie.id, state.movie);
+    if (!movie || typeof movie !== "object") return;
+
+    setState((currentState) => ({
+      ...currentState,
+      movie: {
+        ...currentState.movie,
+        ...movie,
+        genres: Array.isArray(movie.genres) ? [...movie.genres] : [...currentState.movie.genres],
+      },
+    }));
+  } catch (error) {
+    console.error(error);
+  }
+}
+
 function openRatingOverlay() {
   setState((currentState) => ({
     ...currentState,
@@ -522,6 +520,18 @@ function closeFolderOverlay() {
     ...currentState,
     folderOverlay: { ...initialState.folderOverlay },
   }));
+}
+
+function openCreateFolderModal() {
+  window.sessionStorage.setItem(
+    PENDING_CREATE_SOURCE_KEY,
+    JSON.stringify({
+      mediaId: state.movie.id,
+      title: state.movie.title,
+    }),
+  );
+  window.sessionStorage.setItem(OPEN_CREATE_MODAL_KEY, "1");
+  navigateToPage(routes.folders);
 }
 
 function updateFolderSelectionDom(selectedFolderId) {
@@ -634,7 +644,7 @@ function handleRootClick(event) {
     }
 
     if (action === "create-folder-from-overlay") {
-      navigateToPage(getCreateFolderUrl());
+      openCreateFolderModal();
       return;
     }
 
@@ -704,6 +714,7 @@ function initMovieDetailPage() {
   rootElement.addEventListener("click", handleRootClick);
   rootElement.addEventListener("input", handleRootInput);
   renderApp();
+  hydrateMovieDetail();
 }
 
 initMovieDetailPage();

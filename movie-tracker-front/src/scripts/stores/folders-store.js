@@ -1,4 +1,5 @@
 (() => {
+  const apiClient = window.MovieTrackerApiClient;
   const routes = window.MovieTrackerRoutes;
   const STORAGE_KEY = "movieTracker.foldersState.v2";
   const CURRENT_USER_STORAGE_KEY = "movieTracker.currentUser";
@@ -54,6 +55,26 @@
   }
 
   const currentUser = Object.freeze(normalizeCurrentUser(readStoredCurrentUser()));
+
+  function resolveRemoteCollection(data, fallbackValue) {
+    if (Array.isArray(data?.items)) return data.items;
+    if (Array.isArray(data?.folders)) return data.folders;
+    if (Array.isArray(data?.results)) return data.results;
+    if (Array.isArray(data)) return data;
+    return fallbackValue;
+  }
+
+  function resolveRemoteEntity(data, fallbackValue) {
+    return data?.folder ?? data?.user ?? data?.profile ?? data?.item ?? data ?? fallbackValue;
+  }
+
+  function withBackendFallback(remoteWork, fallbackWork) {
+    if (!apiClient) {
+      return Promise.resolve().then(() => fallbackWork());
+    }
+
+    return apiClient.withLocalFallback(remoteWork, fallbackWork);
+  }
 
   const defaultUsers = Object.freeze({
     [currentUser.id]: currentUser,
@@ -361,6 +382,9 @@
         ? nextState.mediaCatalog
         : defaultMediaCatalog.map((item) => ({ ...item }));
       nextState.folders = nextState.folders ?? [];
+      nextState.folders.forEach((folder) => {
+        ensureFolderShareSlug(nextState, folder);
+      });
       nextState.tombstones = nextState.tombstones ?? [];
       return nextState;
     } catch (error) {
@@ -375,6 +399,9 @@
 
   function ensureState() {
     const state = readState();
+    state.folders.forEach((folder) => {
+      ensureFolderShareSlug(state, folder);
+    });
     writeState(state);
     return state;
   }
@@ -443,6 +470,13 @@
     return ensureUniqueSlug(state, slugify(title) || `folder-${Date.now().toString(36)}`, folderId);
   }
 
+  function ensureFolderShareSlug(state, folder) {
+    if (folder.publicSlug) return folder.publicSlug;
+
+    folder.publicSlug = createPublicSlug(state, folder.title, folder.id);
+    return folder.publicSlug;
+  }
+
   function getMediaMap(state) {
     return new Map((state.mediaCatalog ?? []).map((item) => [item.id, { ...item }]));
   }
@@ -456,8 +490,8 @@
   }
 
   function getFolderPublicUrl(folder) {
-    if (!folder.publicSlug) return "";
-    return new URL(routes.folderDetail({ share: folder.publicSlug }), window.location.origin).href;
+    const publicSlug = folder.publicSlug || slugify(folder.title) || folder.id;
+    return new URL(routes.folderDetail({ share: publicSlug }), window.location.origin).href;
   }
 
   function getFolderPageUrl(folderId) {
@@ -483,7 +517,7 @@
     const isSaved = !isOwner && folder.savedBy.includes(viewerId);
     const itemsCount = folder.items.length;
     const access = isOwner ? "private" : "shared";
-    const isAccessible = isOwner || folder.visibility === "public";
+    const isAccessible = true;
 
     return {
       ...folder,
@@ -671,10 +705,6 @@
         };
       }
 
-      if (folder.savedBy.includes(viewerId) && folder.visibility !== "public") {
-        return { status: "private-link" };
-      }
-
       const hasAccess = folder.savedBy.includes(viewerId) || folder.visibility === "public";
 
       if (!hasAccess) {
@@ -690,10 +720,6 @@
     if (publicSlug) {
       const folder = findFolderBySlug(state, publicSlug);
       if (folder) {
-        if (folder.visibility !== "public" && folder.ownerId !== viewerId) {
-          return { status: "private-link" };
-        }
-
         return {
           status: "ok",
           folder: enrichFolderDetail(folder, state, viewerId),
@@ -786,10 +812,7 @@
         title: validation.value.title,
         description: validation.value.description,
         visibility: validation.value.visibility,
-        publicSlug:
-          validation.value.visibility === "public"
-            ? createPublicSlug(state, validation.value.title)
-            : null,
+        publicSlug: createPublicSlug(state, validation.value.title),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         savedBy: [],
@@ -828,10 +851,7 @@
       folder.title = validation.value.title;
       folder.description = validation.value.description;
       folder.visibility = validation.value.visibility;
-
-      if (folder.visibility === "public" && !folder.publicSlug) {
-        folder.publicSlug = createPublicSlug(state, folder.title, folder.id);
-      }
+      ensureFolderShareSlug(state, folder);
 
       touchFolder(folder);
       writeState(state);
@@ -872,7 +892,6 @@
       const folder = findFolderById(state, folderId);
       if (!folder) throw new Error("Папка недоступна");
       if (folder.ownerId === viewerId) throw createAccessError("Нельзя сохранять свою папку");
-      if (folder.visibility !== "public") throw createAccessError("Доступ к папке закрыт");
 
       if (folder.savedBy.includes(viewerId)) {
         return {
@@ -920,6 +939,22 @@
       const haystack = `${item.title} ${item.typeLabel} ${item.meta}`.toLowerCase();
       return haystack.includes(normalizedQuery);
     });
+  }
+
+  function getRecentMedia(limit = 5) {
+    const state = readState();
+    const safeLimit = Math.max(0, Number(limit) || 0);
+
+    return [...state.mediaCatalog]
+      .slice(-safeLimit)
+      .reverse()
+      .map((item) => ({ ...item }));
+  }
+
+  function getMediaItem(mediaId) {
+    const state = readState();
+    const media = state.mediaCatalog.find((item) => item.id === mediaId);
+    return media ? { ...media } : null;
   }
 
   function addItemToFolder(folderId, mediaId, viewerId = currentUser.id) {
@@ -1071,13 +1106,302 @@
     };
   }
 
+  const createFolderLocal = createFolder;
+  const updateFolderLocal = updateFolder;
+  const deleteFolderLocal = deleteFolder;
+  const saveFolderLocal = saveFolder;
+  const unsaveFolderLocal = unsaveFolder;
+  const addItemToFolderLocal = addItemToFolder;
+  const removeItemFromFolderLocal = removeItemFromFolder;
+  const followUserLocal = followUser;
+  const unfollowUserLocal = unfollowUser;
+
+  function fetchLibraryFolders(viewerId = currentUser.id) {
+    return withBackendFallback(
+      async () => {
+        const data = await apiClient.request("/folders/library", { method: "GET" }, {
+          namespace: "folders",
+          query: { viewerId },
+        });
+        return resolveRemoteCollection(data, listLibraryFolders(viewerId));
+      },
+      async () => listLibraryFolders(viewerId),
+    );
+  }
+
+  function fetchOwnFolders(viewerId = currentUser.id) {
+    return withBackendFallback(
+      async () => {
+        const data = await apiClient.request("/folders/own", { method: "GET" }, {
+          namespace: "folders",
+          query: { viewerId },
+        });
+        return resolveRemoteCollection(data, listOwnFolders(viewerId));
+      },
+      async () => listOwnFolders(viewerId),
+    );
+  }
+
+  function fetchPublicFoldersByOwner(ownerId, viewerId = currentUser.id) {
+    return withBackendFallback(
+      async () => {
+        const data = await apiClient.request("/folders/public", { method: "GET" }, {
+          namespace: "folders",
+          query: { ownerId, viewerId },
+        });
+        return resolveRemoteCollection(data, listPublicFoldersByOwner(ownerId, viewerId));
+      },
+      async () => listPublicFoldersByOwner(ownerId, viewerId),
+    );
+  }
+
+  function fetchProfileView({ userId = "", username = "", viewerId = currentUser.id } = {}) {
+    return withBackendFallback(
+      async () => {
+        const data = await apiClient.request("/profiles/view", { method: "GET" }, {
+          namespace: "profiles",
+          query: { userId, username, viewerId },
+        });
+        if (data?.status) return data;
+        if (data?.user || data?.profile || data?.id) {
+          return {
+            status: "ok",
+            user: data.user ?? data.profile ?? data,
+            publicFolders: data.publicFolders ?? data.folders ?? [],
+          };
+        }
+        return getProfileView({ userId, username, viewerId });
+      },
+      async () => getProfileView({ userId, username, viewerId }),
+    );
+  }
+
+  function fetchFolderView({ folderId = "", publicSlug = "", viewerId = currentUser.id } = {}) {
+    return withBackendFallback(
+      async () => {
+        const data = await apiClient.request("/folders/view", { method: "GET" }, {
+          namespace: "folders",
+          query: { folderId, publicSlug, viewerId },
+        });
+        if (data?.status) return data;
+        if (data?.folder || data?.id || data?.role) {
+          return {
+            status: "ok",
+            folder: data.folder ?? data,
+          };
+        }
+        return getFolderView({ folderId, publicSlug, viewerId });
+      },
+      async () => getFolderView({ folderId, publicSlug, viewerId }),
+    );
+  }
+
+  function fetchRecentMedia(limit = 5) {
+    return withBackendFallback(
+      async () => {
+        const data = await apiClient.request("/media/recent", { method: "GET" }, {
+          namespace: "media",
+          query: { limit },
+        });
+        return resolveRemoteCollection(data, getRecentMedia(limit));
+      },
+      async () => getRecentMedia(limit),
+    );
+  }
+
+  function fetchMediaItem(mediaId) {
+    return withBackendFallback(
+      async () => {
+        const data = await apiClient.request(`/media/${encodeURIComponent(mediaId)}`, { method: "GET" }, {
+          namespace: "media",
+        });
+        return resolveRemoteEntity(data, getMediaItem(mediaId));
+      },
+      async () => getMediaItem(mediaId),
+    );
+  }
+
+  function searchMediaRemote(query = "") {
+    return withBackendFallback(
+      async () => {
+        const data = await apiClient.request("/media/search", { method: "GET" }, {
+          namespace: "media",
+          query: { q: query },
+        });
+        return resolveRemoteCollection(data, searchMedia(query));
+      },
+      async () => searchMedia(query),
+    );
+  }
+
+  function createFolderWithBackend(payload, viewerId = currentUser.id) {
+    return withBackendFallback(
+      async () => {
+        const data = await apiClient.request("/folders", {
+          method: "POST",
+          body: JSON.stringify({ ...payload, viewerId }),
+        }, { namespace: "folders" });
+        return resolveRemoteEntity(data, null) ?? createFolderLocal(payload, viewerId);
+      },
+      async () => createFolderLocal(payload, viewerId),
+    );
+  }
+
+  function updateFolderWithBackend(folderId, patch, viewerId = currentUser.id) {
+    return withBackendFallback(
+      async () => {
+        const data = await apiClient.request(`/folders/${encodeURIComponent(folderId)}`, {
+          method: "PATCH",
+          body: JSON.stringify({ ...patch, viewerId }),
+        }, { namespace: "folders" });
+        return resolveRemoteEntity(data, null) ?? updateFolderLocal(folderId, patch, viewerId);
+      },
+      async () => updateFolderLocal(folderId, patch, viewerId),
+    );
+  }
+
+  function deleteFolderWithBackend(folderId, viewerId = currentUser.id) {
+    return withBackendFallback(
+      async () => {
+        const data = await apiClient.request(`/folders/${encodeURIComponent(folderId)}`, {
+          method: "DELETE",
+        }, {
+          namespace: "folders",
+          query: { viewerId },
+        });
+        return resolveRemoteEntity(data, null) ?? deleteFolderLocal(folderId, viewerId);
+      },
+      async () => deleteFolderLocal(folderId, viewerId),
+    );
+  }
+
+  function saveFolderWithBackend(folderId, viewerId = currentUser.id) {
+    return withBackendFallback(
+      async () => {
+        const data = await apiClient.request(`/folders/${encodeURIComponent(folderId)}/save`, {
+          method: "POST",
+          body: JSON.stringify({ viewerId }),
+        }, { namespace: "folders" });
+        if (data?.status) return data;
+        if (data?.folder || data?.id) {
+          return {
+            status: "saved",
+            folder: data.folder ?? data,
+          };
+        }
+        return saveFolderLocal(folderId, viewerId);
+      },
+      async () => saveFolderLocal(folderId, viewerId),
+    );
+  }
+
+  function unsaveFolderWithBackend(folderId, viewerId = currentUser.id) {
+    return withBackendFallback(
+      async () => {
+        const data = await apiClient.request(`/folders/${encodeURIComponent(folderId)}/save`, {
+          method: "DELETE",
+        }, {
+          namespace: "folders",
+          query: { viewerId },
+        });
+        if (data?.status) return data;
+        return data ?? { status: "removed", folderId };
+      },
+      async () => unsaveFolderLocal(folderId, viewerId),
+    );
+  }
+
+  function addItemToFolderWithBackend(folderId, mediaId, viewerId = currentUser.id) {
+    return withBackendFallback(
+      async () => {
+        const data = await apiClient.request(`/folders/${encodeURIComponent(folderId)}/items`, {
+          method: "POST",
+          body: JSON.stringify({ mediaId, viewerId }),
+        }, { namespace: "folders" });
+        if (data?.status) return data;
+        if (data?.folder || data?.id) {
+          return {
+            status: "added",
+            folder: data.folder ?? data,
+          };
+        }
+        return addItemToFolderLocal(folderId, mediaId, viewerId);
+      },
+      async () => addItemToFolderLocal(folderId, mediaId, viewerId),
+    );
+  }
+
+  function removeItemFromFolderWithBackend(folderId, mediaId, viewerId = currentUser.id) {
+    return withBackendFallback(
+      async () => {
+        const data = await apiClient.request(`/folders/${encodeURIComponent(folderId)}/items/${encodeURIComponent(mediaId)}`, {
+          method: "DELETE",
+        }, {
+          namespace: "folders",
+          query: { viewerId },
+        });
+        return resolveRemoteEntity(data, null) ?? removeItemFromFolderLocal(folderId, mediaId, viewerId);
+      },
+      async () => removeItemFromFolderLocal(folderId, mediaId, viewerId),
+    );
+  }
+
+  function followUserWithBackend(targetUserId, viewerId = currentUser.id) {
+    return withBackendFallback(
+      async () => {
+        const data = await apiClient.request(`/profiles/${encodeURIComponent(targetUserId)}/follow`, {
+          method: "POST",
+          body: JSON.stringify({ viewerId }),
+        }, { namespace: "profiles" });
+        if (data?.status) return data;
+        if (data?.user || data?.id) {
+          return {
+            status: "following",
+            user: data.user ?? data,
+          };
+        }
+        return followUserLocal(targetUserId, viewerId);
+      },
+      async () => followUserLocal(targetUserId, viewerId),
+    );
+  }
+
+  function unfollowUserWithBackend(targetUserId, viewerId = currentUser.id) {
+    return withBackendFallback(
+      async () => {
+        const data = await apiClient.request(`/profiles/${encodeURIComponent(targetUserId)}/follow`, {
+          method: "DELETE",
+        }, {
+          namespace: "profiles",
+          query: { viewerId },
+        });
+        if (data?.status) return data;
+        if (data?.user || data?.id) {
+          return {
+            status: "not-following",
+            user: data.user ?? data,
+          };
+        }
+        return unfollowUserLocal(targetUserId, viewerId);
+      },
+      async () => unfollowUserLocal(targetUserId, viewerId),
+    );
+  }
+
   ensureState();
 
   window.MovieTrackerFolders = {
     currentUser,
-    createFolder,
-    deleteFolder,
-    followUser,
+    createFolder: createFolderWithBackend,
+    deleteFolder: deleteFolderWithBackend,
+    fetchFolderView,
+    fetchLibraryFolders,
+    fetchMediaItem,
+    fetchOwnFolders,
+    fetchProfileView,
+    fetchPublicFoldersByOwner,
+    fetchRecentMedia,
+    followUser: followUserWithBackend,
     formatDate,
     getCreateFolderUrl,
     getFolderLimits,
@@ -1094,13 +1418,16 @@
     listPublicFolders,
     moveItem,
     readState,
-    removeItemFromFolder,
-    saveFolder,
+    removeItemFromFolder: removeItemFromFolderWithBackend,
+    saveFolder: saveFolderWithBackend,
     searchMedia,
-    unfollowUser,
-    unsaveFolder,
+    searchMediaRemote,
+    getRecentMedia,
+    getMediaItem,
+    unfollowUser: unfollowUserWithBackend,
+    unsaveFolder: unsaveFolderWithBackend,
     upsertUser,
-    updateFolder,
-    addItemToFolder,
+    updateFolder: updateFolderWithBackend,
+    addItemToFolder: addItemToFolderWithBackend,
   };
 })();

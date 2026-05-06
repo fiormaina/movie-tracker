@@ -860,7 +860,9 @@ a {
   position: relative;
   width: min(100%, 560px);
   max-height: min(720px, calc(100vh - 48px));
-  overflow: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   padding: 30px;
   border-radius: 28px;
   border: 1px solid rgba(124, 92, 252, 0.18);
@@ -888,8 +890,14 @@ a {
   font-size: 1.35rem;
 }
 
+.modal-card__body {
+  overflow-y: auto;
+  min-height: 0;
+}
+
 .modal-card__footer {
   display: flex;
+  flex: 0 0 auto;
   justify-content: flex-end;
   gap: 10px;
   margin-top: 22px;
@@ -927,13 +935,13 @@ a {
   border-color: var(--accent-border);
 }
 
-.modal-card__confirm:hover,
-.modal-card__confirm:focus-visible {
+.modal-card__confirm:not(:disabled):hover,
+.modal-card__confirm:not(:disabled):focus-visible {
   background: var(--accent-soft-strong);
 }
 
 .modal-card__confirm:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.72;
 }
 
@@ -1024,6 +1032,9 @@ a {
 .folder-options {
   display: grid;
   gap: 10px;
+  max-height: min(340px, 48vh);
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .folder-option {
