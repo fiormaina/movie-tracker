@@ -30,9 +30,9 @@
 }
 
 .folder-detail__hero,
+.folder-detail__add,
 .folder-detail__notice,
 .folder-detail__section,
-.folder-detail__search,
 .folder-detail__empty,
 .folder-detail__state,
 .folder-detail__loading {
@@ -46,6 +46,12 @@
   display: grid;
   gap: 18px;
   padding: 28px;
+}
+
+.folder-detail__add {
+  display: grid;
+  gap: 16px;
+  padding: 24px;
 }
 
 .folder-detail__hero-top {
@@ -80,7 +86,8 @@
 .folder-detail__state-text,
 .folder-detail__item-meta,
 .folder-detail__item-date,
-.folder-detail__field-hint {
+.folder-detail__field-hint,
+.folder-detail__search-state {
   margin: 0;
   color: #5f5c6a;
   line-height: 1.6;
@@ -128,6 +135,42 @@
   gap: 16px;
 }
 
+.folder-detail__switch {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fbfaff;
+  width: fit-content;
+}
+
+.folder-detail__switch-button {
+  min-height: 40px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: #6d6a78;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+
+.folder-detail__switch-button:not(:disabled):hover,
+.folder-detail__switch-button:not(:disabled):focus-visible,
+.folder-detail__switch-button--active {
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.folder-detail__switch-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
 .folder-detail__field {
   display: grid;
   gap: 8px;
@@ -154,6 +197,10 @@
 .folder-detail__search-input {
   min-height: 48px;
   padding: 0 16px;
+}
+
+.folder-detail__search-input {
+  padding-right: 42px;
 }
 
 .folder-detail__textarea {
@@ -209,10 +256,30 @@
 
 .folder-detail__search {
   display: grid;
-  gap: 16px;
-  padding: 20px;
-  margin-bottom: 18px;
-  background: #fbfaff;
+  gap: 14px;
+}
+
+.folder-detail__search-field {
+  position: relative;
+}
+
+.folder-detail__search-icon {
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--accent);
+  pointer-events: none;
+}
+
+.folder-detail__search-group {
+  display: grid;
+  gap: 12px;
+}
+
+.folder-detail__search-title {
+  margin: 0;
+  font-size: 1rem;
 }
 
 .folder-detail__search-results,
@@ -323,7 +390,7 @@
 .folder-detail__search .profile-button:disabled,
 .folder-detail__actions .profile-button:disabled,
 .folder-detail__edit-actions .profile-button:disabled {
-  cursor: wait;
+  cursor: not-allowed;
   opacity: 0.72;
   transform: none;
 }
@@ -396,8 +463,8 @@
   }
 
   .folder-detail__hero,
+  .folder-detail__add,
   .folder-detail__section,
-  .folder-detail__search,
   .folder-detail__notice,
   .folder-detail__empty,
   .folder-detail__state,
@@ -423,6 +490,14 @@
   .folder-detail__edit-actions .profile-button,
   .folder-detail__search-actions .profile-button {
     width: 100%;
+  }
+
+  .folder-detail__switch {
+    width: 100%;
+  }
+
+  .folder-detail__switch-button {
+    flex: 1;
   }
 
   .folder-detail__item-actions {

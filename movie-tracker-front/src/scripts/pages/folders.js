@@ -11,13 +11,22 @@
   const { renderEmptyMessage } = window.MovieTrackerFeedback;
   const { renderLibraryFolderCard } = window.MovieTrackerFolderCard;
   const {
+    createFolder,
     currentUser,
     deleteFolder,
-    getCreateFolderUrl,
+    fetchLibraryFolders,
+    getFolderLimits,
+    getFolderPageUrl,
     listLibraryFolders,
     unsaveFolder,
   } = window.MovieTrackerFolders;
   const routes = window.MovieTrackerRoutes;
+  const PENDING_TOAST_KEY = "movieTracker.pendingFolderToast";
+  const PENDING_SEARCH_KEY = "movieTracker.openFolderSearch";
+  const OPEN_CREATE_MODAL_KEY = "movieTracker.openCreateFolderModal";
+  const PENDING_CREATE_SOURCE_KEY = "movieTracker.pendingCreateFolderSource";
+  const PENDING_FOLDER_SOURCE_KEY = "movieTracker.pendingFolderSource";
+  const folderLimits = getFolderLimits();
 
   const initialState = {
     tabs: createPrimaryTabs("folders"),
@@ -32,6 +41,15 @@
     deleteOverlay: {
       isOpen: false,
       folderId: null,
+    },
+    createOverlay: {
+      isOpen: false,
+      form: {
+        title: "",
+        description: "",
+      },
+      errors: {},
+      loading: false,
     },
     loading: true,
     toasts: [],
@@ -48,6 +66,11 @@
       filters: value.filters.map((filter) => ({ ...filter })),
       folders: value.folders.map((folder) => ({ ...folder, owner: folder.owner ? { ...folder.owner } : null })),
       deleteOverlay: { ...value.deleteOverlay },
+      createOverlay: {
+        ...value.createOverlay,
+        form: { ...value.createOverlay.form },
+        errors: { ...value.createOverlay.errors },
+      },
       toasts: [...value.toasts],
     };
   }
@@ -61,24 +84,32 @@
     return state.folders.find((folder) => folder.id === id);
   }
 
-  function loadFolders() {
+  async function loadFolders() {
     setState((currentState) => ({
       ...currentState,
       loading: true,
       folders: listLibraryFolders(currentUser.id),
     }));
 
-    window.setTimeout(() => {
+    try {
+      const folders = await fetchLibraryFolders(currentUser.id);
+      setState((currentState) => ({
+        ...currentState,
+        folders: Array.isArray(folders) ? folders : listLibraryFolders(currentUser.id),
+        loading: false,
+      }));
+    } catch (error) {
+      console.error(error);
       setState((currentState) => ({
         ...currentState,
         folders: listLibraryFolders(currentUser.id),
         loading: false,
       }));
-    }, 180);
+    }
   }
 
   function showPendingToast() {
-    const rawToast = window.sessionStorage.getItem("movieTracker.pendingFolderToast");
+    const rawToast = window.sessionStorage.getItem(PENDING_TOAST_KEY);
     if (!rawToast) return;
 
     try {
@@ -87,8 +118,32 @@
     } catch (error) {
       console.warn(error);
     } finally {
-      window.sessionStorage.removeItem("movieTracker.pendingFolderToast");
+      window.sessionStorage.removeItem(PENDING_TOAST_KEY);
     }
+  }
+
+  function shouldAutoOpenCreateModal() {
+    const flag = window.sessionStorage.getItem(OPEN_CREATE_MODAL_KEY);
+    if (!flag) return false;
+    window.sessionStorage.removeItem(OPEN_CREATE_MODAL_KEY);
+    return true;
+  }
+
+  function readPendingCreateSource() {
+    const rawValue = window.sessionStorage.getItem(PENDING_CREATE_SOURCE_KEY);
+    if (!rawValue) return null;
+
+    try {
+      const parsedValue = JSON.parse(rawValue);
+      return parsedValue && typeof parsedValue === "object" ? parsedValue : null;
+    } catch (error) {
+      console.warn(error);
+      return null;
+    }
+  }
+
+  function clearPendingCreateSource() {
+    window.sessionStorage.removeItem(PENDING_CREATE_SOURCE_KEY);
   }
 
   function getVisibleFolders() {
@@ -214,6 +269,60 @@
     );
   }
 
+  function canSubmitCreateFolder() {
+    return !state.createOverlay.loading && state.createOverlay.form.title.trim().length > 0;
+  }
+
+  function renderCreateFieldError(fieldName) {
+    const message = state.createOverlay.errors[fieldName];
+    return message ? `<span class="folders-create__error">${escapeHtml(message)}</span>` : "";
+  }
+
+  function renderCreateOverlay() {
+    if (!state.createOverlay.isOpen) return "";
+
+    return renderModalShell(
+      "Создать папку",
+      `
+        <div class="folders-create">
+          <label class="folders-create__field">
+            <span class="folders-create__label">Название</span>
+            <input
+              class="folders-create__input ${state.createOverlay.errors.title ? "folders-create__input--error" : ""}"
+              type="text"
+              maxlength="${folderLimits.titleMaxLength}"
+              placeholder="Название"
+              value="${escapeHtml(state.createOverlay.form.title)}"
+              data-create-field="title"
+              ${state.createOverlay.loading ? "disabled" : ""}
+            />
+            ${renderCreateFieldError("title")}
+          </label>
+          <label class="folders-create__field">
+            <span class="folders-create__label">Описание</span>
+            <textarea
+              class="folders-create__textarea ${state.createOverlay.errors.description ? "folders-create__input--error" : ""}"
+              maxlength="${folderLimits.descriptionMaxLength}"
+              placeholder="Описание"
+              data-create-field="description"
+              ${state.createOverlay.loading ? "disabled" : ""}
+            >${escapeHtml(state.createOverlay.form.description)}</textarea>
+            ${renderCreateFieldError("description")}
+          </label>
+        </div>
+      `,
+      `
+        <div class="modal-card__footer modal-card__footer--split">
+          <button class="modal-card__secondary" type="button" data-create-cancel ${state.createOverlay.loading ? "disabled" : ""}>Отмена</button>
+          <button class="modal-card__confirm" type="button" data-create-confirm ${canSubmitCreateFolder() ? "" : "disabled"}>
+            ${state.createOverlay.loading ? "Создаем..." : "Создать"}
+          </button>
+        </div>
+      `,
+      "create-folder",
+    );
+  }
+
   function renderPage() {
     const visibleFolders = getVisibleFolders();
 
@@ -257,6 +366,7 @@
         </div>
         ${renderToasts(state.toasts)}
         ${renderDeleteOverlay(state.deleteOverlay)}
+        ${renderCreateOverlay()}
       </div>
     `;
   }
@@ -274,14 +384,19 @@
     rootElement.innerHTML = renderPage();
   }
 
+  function restoreCreateFieldFocus(fieldName, selectionStart, selectionEnd) {
+    const nextField = rootElement?.querySelector(`[data-create-field="${fieldName}"]`);
+    if (!nextField) return;
+
+    nextField.focus();
+    if (typeof selectionStart === "number" && typeof nextField.setSelectionRange === "function") {
+      nextField.setSelectionRange(selectionStart, selectionEnd ?? selectionStart);
+    }
+  }
+
   async function copyFolderLink(id) {
     const folder = getFolderById(id);
     if (!folder) return;
-
-    if (!folder.isPublic || !folder.publicUrl) {
-      showToast("Папка недоступна по ссылке", "error");
-      return;
-    }
 
     try {
       await writeClipboardText(folder.publicUrl);
@@ -309,6 +424,98 @@
       ...currentState,
       deleteOverlay: { ...initialState.deleteOverlay },
     }));
+  }
+
+  function openCreateOverlay() {
+    setState((currentState) => ({
+      ...currentState,
+      createOverlay: {
+        isOpen: true,
+        form: { ...initialState.createOverlay.form },
+        errors: {},
+        loading: false,
+      },
+    }));
+    window.requestAnimationFrame(() => restoreCreateFieldFocus("title"));
+  }
+
+  function closeCreateOverlay() {
+    if (state.createOverlay.loading) return;
+    clearPendingCreateSource();
+
+    setState((currentState) => ({
+      ...currentState,
+      createOverlay: {
+        isOpen: false,
+        form: { ...initialState.createOverlay.form },
+        errors: {},
+        loading: false,
+      },
+    }));
+  }
+
+  async function confirmCreateOverlay() {
+    if (!canSubmitCreateFolder()) return;
+
+    setState((currentState) => ({
+      ...currentState,
+      createOverlay: {
+        ...currentState.createOverlay,
+        loading: true,
+        errors: {},
+      },
+    }));
+
+    try {
+      const folder = await createFolder({
+        ...state.createOverlay.form,
+        visibility: "private",
+      });
+      const pendingSource = readPendingCreateSource();
+
+      window.sessionStorage.setItem(
+        PENDING_TOAST_KEY,
+        JSON.stringify({ message: "Папка создана", type: "success" }),
+      );
+      window.sessionStorage.setItem(
+        PENDING_SEARCH_KEY,
+        JSON.stringify({ folderId: folder.id }),
+      );
+      if (pendingSource?.title) {
+        window.sessionStorage.setItem(
+          PENDING_FOLDER_SOURCE_KEY,
+          JSON.stringify({
+            folderId: folder.id,
+            mediaId: pendingSource.mediaId ?? "",
+            title: pendingSource.title,
+          }),
+        );
+      }
+      clearPendingCreateSource();
+      navigateToPage(getFolderPageUrl(folder.id));
+    } catch (error) {
+      console.error(error);
+      if (error.code === "validation") {
+        setState((currentState) => ({
+          ...currentState,
+          createOverlay: {
+            ...currentState.createOverlay,
+            loading: false,
+            errors: { ...(error.errors ?? {}) },
+          },
+        }));
+        return;
+      }
+
+      setState((currentState) => ({
+        ...currentState,
+        createOverlay: {
+          ...currentState.createOverlay,
+          loading: false,
+        },
+      }));
+      showToast("Ошибка загрузки", "error");
+    }
   }
 
   async function confirmDelete() {
@@ -377,7 +584,7 @@
       }
 
       if (action === "create-folder") {
-        navigateToPage(getCreateFolderUrl());
+        openCreateOverlay();
         return;
       }
     }
@@ -398,8 +605,23 @@
       return;
     }
 
+    if (event.target.closest("[data-create-cancel]") || event.target.closest('[data-modal-close="create-folder"]')) {
+      closeCreateOverlay();
+      return;
+    }
+
+    if (event.target.closest("[data-create-confirm]")) {
+      confirmCreateOverlay();
+      return;
+    }
+
     if (event.target.dataset.modalBackdrop === "delete") {
       closeDeleteOverlay();
+      return;
+    }
+
+    if (event.target.dataset.modalBackdrop === "create-folder") {
+      closeCreateOverlay();
       return;
     }
 
@@ -410,6 +632,24 @@
   }
 
   function handleRootKeydown(event) {
+    if (state.createOverlay.isOpen) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeCreateOverlay();
+        return;
+      }
+
+      if (
+        event.key === "Enter" &&
+        event.target.closest('[data-modal-backdrop="create-folder"], .modal-card') &&
+        !event.target.closest("textarea")
+      ) {
+        event.preventDefault();
+        confirmCreateOverlay();
+        return;
+      }
+    }
+
     const folderCard = event.target.closest("[data-folder-card]");
     if (!folderCard || event.target !== folderCard) return;
     if (event.key !== "Enter" && event.key !== " ") return;
@@ -419,6 +659,17 @@
   }
 
   function handleRootInput(event) {
+    const createField = event.target.closest("[data-create-field]");
+    if (createField) {
+      const selectionStart = createField.selectionStart;
+      const selectionEnd = createField.selectionEnd;
+      state.createOverlay.form[createField.dataset.createField] = createField.value;
+      delete state.createOverlay.errors[createField.dataset.createField];
+      renderApp();
+      restoreCreateFieldFocus(createField.dataset.createField, selectionStart, selectionEnd);
+      return;
+    }
+
     const searchInput = event.target.closest("[data-folder-search]");
     if (!searchInput) return;
 
@@ -438,6 +689,9 @@
     rootElement.addEventListener("keydown", handleRootKeydown);
     rootElement.addEventListener("input", handleRootInput);
     renderApp();
+    if (shouldAutoOpenCreateModal()) {
+      openCreateOverlay();
+    }
     showPendingToast();
     loadFolders();
   }

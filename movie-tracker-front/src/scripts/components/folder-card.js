@@ -18,7 +18,7 @@
   }
 
   function renderLibraryFolderCard(folder, options = {}) {
-    const copyTooltip = folder.isPublic ? "Копировать ссылку" : "Ссылка недоступна";
+    const copyTooltip = "Копировать ссылку";
     const deleteTooltip = folder.isOwner ? "Удалить" : "Удалить из сохраненных";
     const countText = options.countText ?? "";
 
@@ -87,6 +87,17 @@
                 `,
               )
               .join("")}
+          </div>
+          <div class="folder-card__actions">
+            <div class="folder-card__action">
+              <span class="folder-card__tooltip">Копировать ссылку</span>
+              <button class="folder-card__icon-button" type="button" data-action="copy-folder-link" data-id="${escapeHtml(folder.id)}" aria-label="Копировать ссылку">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                  <path d="M7.4 10.6C6.25 9.45 6.25 7.6 7.4 6.45L9.65 4.2C10.8 3.05 12.65 3.05 13.8 4.2C14.95 5.35 14.95 7.2 13.8 8.35L12.78 9.37" stroke="currentColor" stroke-width="1.55" stroke-linecap="round"></path>
+                  <path d="M10.6 7.4C11.75 8.55 11.75 10.4 10.6 11.55L8.35 13.8C7.2 14.95 5.35 14.95 4.2 13.8C3.05 12.65 3.05 10.8 4.2 9.65L5.22 8.63" stroke="currentColor" stroke-width="1.55" stroke-linecap="round"></path>
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
         <div class="folder-card__body">

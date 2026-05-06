@@ -1,6 +1,7 @@
 (() => {
 const {
   autoSizeTextarea,
+  escapeHtml,
   navigateToPage,
   renderModalShell,
   renderToasts,
@@ -9,47 +10,12 @@ const { createToastController } = window.MovieTrackerHelpers;
 const { createPrimaryTabs, renderAppFooter, renderAppHeader } = window.MovieTrackerAppShell;
 const {
   addItemToFolder,
-  getCreateFolderUrl,
   listFolderOptions,
 } = window.MovieTrackerFolders;
+const watchHistoryApi = window.MovieTrackerMediaApi;
 const routes = window.MovieTrackerRoutes;
-
-const MOCK_API_DELAY = 450;
-const MOCK_API_SHOULD_FAIL = false;
-const watchHistoryApi = {
-  updateWatchItem(id, patch) {
-    return new Promise((resolve, reject) => {
-      window.setTimeout(() => {
-        if (MOCK_API_SHOULD_FAIL) {
-          reject(new Error("Mock API error"));
-          return;
-        }
-
-        resolve({
-          id,
-          ...patch,
-          updatedAt: new Date().toISOString(),
-        });
-      }, MOCK_API_DELAY);
-    });
-  },
-  createWatchItem(payload) {
-    return new Promise((resolve, reject) => {
-      window.setTimeout(() => {
-        if (MOCK_API_SHOULD_FAIL) {
-          reject(new Error("Mock API error"));
-          return;
-        }
-
-        resolve({
-          id: `manual-${Date.now()}`,
-          ...payload,
-          createdAt: new Date().toISOString(),
-        });
-      }, MOCK_API_DELAY);
-    });
-  },
-};
+const OPEN_CREATE_MODAL_KEY = "movieTracker.openCreateFolderModal";
+const PENDING_CREATE_SOURCE_KEY = "movieTracker.pendingCreateFolderSource";
 
 const manualStatuses = [
   { value: "planned", label: "Планирую смотреть" },
@@ -100,10 +66,12 @@ const cardActions = {
 const initialState = {
   tabs: createPrimaryTabs("history"),
   filters: [
-    { label: "Все", active: true },
-    { label: "Фильмы", active: false },
-    { label: "Сериалы", active: false },
+    { label: "Все", value: "all", active: true },
+    { label: "Фильмы", value: "movie", active: false },
+    { label: "Сериалы", value: "series", active: false },
   ],
+  query: "",
+  activeFilter: "all",
   items: [
     {
       id: "series-1",
@@ -329,6 +297,22 @@ function getSections(items) {
   ];
 }
 
+function getItemType(item) {
+  if (String(item.id ?? "").startsWith("series-")) return "series";
+  return "movie";
+}
+
+function getVisibleItems() {
+  const normalizedQuery = state.query.trim().toLowerCase();
+
+  return state.items.filter((item) => {
+    const matchesFilter = state.activeFilter === "all" || getItemType(item) === state.activeFilter;
+    const haystack = `${item.title} ${item.meta} ${item.badge}`.toLowerCase();
+    const matchesQuery = !normalizedQuery || haystack.includes(normalizedQuery);
+    return matchesFilter && matchesQuery;
+  });
+}
+
 function getHistoryStats(items) {
   const watchingCount = items.filter((item) => item.status !== "completed").length;
   const completedCount = items.filter((item) => item.status === "completed").length;
@@ -348,7 +332,7 @@ function renderFilters(filters) {
   return filters
     .map(
       (filter) => `
-        <button class="history-toolbar__filter ${filter.active ? "history-toolbar__filter--active" : ""}" type="button">
+        <button class="history-toolbar__filter ${filter.active ? "history-toolbar__filter--active" : ""}" type="button" data-filter="${filter.value}">
           ${filter.label}
         </button>
       `,
@@ -435,9 +419,6 @@ function renderCard(item) {
 }
 
 function renderSections(sections) {
-  const hasItems = sections.some((section) => section.items.length > 0);
-  if (!hasItems) return renderEmptyHistoryState();
-
   return sections
     .map(
       (section) => `
@@ -469,6 +450,16 @@ function renderEmptyHistoryState() {
           <a href="${routes.profile()}#extension" data-nav-url="${routes.profile()}#extension">Открыть инструкцию</a>
         </div>
       </div>
+    </section>
+  `;
+}
+
+function renderFilteredEmptyState() {
+  return `
+    <section class="history-empty" aria-live="polite">
+      <div class="history-empty__icon" aria-hidden="true"></div>
+      <h2 class="history-empty__title">Ничего не найдено</h2>
+      <p class="history-empty__text">Попробуйте изменить поиск или фильтр.</p>
     </section>
   `;
 }
@@ -724,6 +715,12 @@ function renderOverlays() {
 
 function renderPage() {
   const stats = getHistoryStats(state.items);
+  const visibleItems = getVisibleItems();
+  const content = state.items.length
+    ? visibleItems.length
+      ? renderSections(getSections(visibleItems))
+      : renderFilteredEmptyState()
+    : renderEmptyHistoryState();
 
   return `
     <div class="history-page">
@@ -745,7 +742,7 @@ function renderPage() {
 
           <section class="history-toolbar" aria-label="Поиск и фильтры">
             <div class="history-toolbar__search">
-              <input class="history-toolbar__input" type="text" placeholder="Поиск по названию" />
+              <input class="history-toolbar__input" type="text" placeholder="Поиск по названию" value="${escapeHtml(state.query)}" data-history-search />
               <span class="history-toolbar__icon" aria-hidden="true">
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
                   <circle cx="6.5" cy="6.5" r="5" stroke="currentColor" stroke-width="1.5"></circle>
@@ -759,7 +756,7 @@ function renderPage() {
             </div>
           </section>
 
-          ${renderSections(getSections(state.items))}
+          ${content}
 
           ${renderAppFooter()}
         </div>
@@ -773,6 +770,20 @@ function renderPage() {
 function renderApp() {
   if (!rootElement) return;
   rootElement.innerHTML = renderPage();
+}
+
+async function hydrateWatchHistory() {
+  try {
+    const items = await watchHistoryApi.listWatchHistory(state.items);
+    if (!Array.isArray(items)) return;
+
+    setState((currentState) => ({
+      ...currentState,
+      items: items.map((item) => ({ ...item })),
+    }));
+  } catch (error) {
+    console.error(error);
+  }
 }
 
 async function markAsCompleted(id) {
@@ -900,6 +911,21 @@ function closeFolderOverlay() {
     ...currentState,
     folderOverlay: { ...initialState.folderOverlay },
   }));
+}
+
+function openCreateFolderModal() {
+  const sourceItem = state.folderOverlay.itemId ? getItemById(state.folderOverlay.itemId) : null;
+  if (sourceItem) {
+    window.sessionStorage.setItem(
+      PENDING_CREATE_SOURCE_KEY,
+      JSON.stringify({
+        mediaId: sourceItem.id,
+        title: sourceItem.title,
+      }),
+    );
+  }
+  window.sessionStorage.setItem(OPEN_CREATE_MODAL_KEY, "1");
+  navigateToPage(routes.folders);
 }
 
 function updateFolderSelectionDom(selectedFolderId) {
@@ -1056,16 +1082,38 @@ async function confirmManualAdd() {
   }
 
   const payload = getManualPayload(form);
-  console.log("[Movie Tracker manual item]", payload);
+  setState((currentState) => ({
+    ...currentState,
+    manualOverlay: {
+      ...currentState.manualOverlay,
+      loading: true,
+    },
+  }));
 
   try {
-    watchHistoryApi.createWatchItem(payload).catch((error) => {
-      console.error(error);
-      showToast("Не удалось обновить данные", "error");
-    });
+    const createdItem = await watchHistoryApi.createWatchItem(payload);
+    const now = createdItem.createdAt || new Date().toISOString();
+    const typeLabel = payload.type === "series" ? "Сериал" : "Фильм";
+    const badge = payload.type === "series" && payload.status === "watching" && payload.season !== null && payload.episode !== null
+      ? `Сезон ${payload.season}, серия ${payload.episode}`
+      : "";
+    const nextItem = {
+      id: createdItem.id,
+      title: payload.title,
+      status: payload.status,
+      progress: payload.status === "completed" ? 100 : payload.status === "watching" ? 36 : 0,
+      rating: payload.rating ?? 0,
+      comment: payload.comment ?? "",
+      folderId: payload.folderId,
+      badge,
+      meta: `${typeLabel} · Добавлено вручную`,
+      updatedAt: now,
+      watchedAt: payload.status === "completed" ? now : null,
+    };
 
     setState((currentState) => ({
       ...currentState,
+      items: [nextItem, ...currentState.items],
       manualOverlay: { ...initialState.manualOverlay, form: { ...defaultManualForm }, errors: {} },
     }));
     showToast("Добавлено вручную", "success");
@@ -1120,6 +1168,20 @@ function handleRootClick(event) {
     return;
   }
 
+  const filterButton = event.target.closest("[data-filter]");
+  if (filterButton) {
+    const nextFilterValue = filterButton.dataset.filter;
+    setState((currentState) => ({
+      ...currentState,
+      activeFilter: nextFilterValue,
+      filters: currentState.filters.map((filter) => ({
+        ...filter,
+        active: filter.value === nextFilterValue,
+      })),
+    }));
+    return;
+  }
+
   const actionButton = event.target.closest("[data-action]");
   if (actionButton) {
     const id = actionButton.dataset.id;
@@ -1151,7 +1213,7 @@ function handleRootClick(event) {
     }
 
     if (action === "create-folder-from-overlay") {
-      navigateToPage(getCreateFolderUrl());
+      openCreateFolderModal();
       return;
     }
   }
@@ -1258,6 +1320,17 @@ function handleRootKeydown(event) {
 }
 
 function handleRootInput(event) {
+  const historySearch = event.target.closest("[data-history-search]");
+  if (historySearch) {
+    state.query = historySearch.value;
+    renderApp();
+    const nextInput = rootElement?.querySelector("[data-history-search]");
+    nextInput?.focus();
+    const valueLength = nextInput?.value.length ?? 0;
+    nextInput?.setSelectionRange(valueLength, valueLength);
+    return;
+  }
+
   const textarea = event.target.closest("[data-rating-comment]");
   if (textarea) {
     autoSizeTextarea(textarea);
@@ -1280,6 +1353,7 @@ function initWatchHistoryPage() {
   rootElement.addEventListener("keydown", handleRootKeydown);
   rootElement.addEventListener("input", handleRootInput);
   renderApp();
+  hydrateWatchHistory();
 }
 
 initWatchHistoryPage();

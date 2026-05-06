@@ -46,6 +46,7 @@
   function renderModalShell(title, body, footer, modalType) {
     const safeTitle = escapeHtml(title);
     const safeModalType = escapeHtml(modalType);
+    const bodyMarkup = body ? `<div class="modal-card__body">${body}</div>` : "";
 
     return `
       <div class="modal-backdrop" data-modal-backdrop="${safeModalType}">
@@ -56,7 +57,7 @@
             </svg>
           </button>
           <h2 class="modal-card__title">${safeTitle}</h2>
-          ${body}
+          ${bodyMarkup}
           ${footer}
         </section>
       </div>
