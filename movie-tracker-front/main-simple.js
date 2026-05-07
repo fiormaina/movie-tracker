@@ -428,7 +428,7 @@ function normalizeAuthUser(responseData, fallbackIdentifier) {
     followingCount: source.followingCount ?? 0,
     followersCount: source.followersCount ?? 0,
     extensionCode: source.extensionCode ?? "MT-USER-2026",
-    profileUrl: source.profileUrl ?? new URL("./profile.html", window.location.href).href,
+    profileUrl: source.profileUrl ?? new URL("./pages/profile.html", window.location.href).href,
   };
 }
 
@@ -544,7 +544,7 @@ async function handleAuthSubmit(event) {
     }
 
     saveCurrentUser(normalizeAuthUser(responseData, fallbackIdentifier));
-    window.location.href = type === "register" ? "./profile.html" : "./watch_history_light_v3.html";
+    window.location.href = type === "register" ? "./pages/profile.html" : "./pages/watch-history.html";
   } catch (error) {
     console.error(error);
     setAuthRequestError(form, error);

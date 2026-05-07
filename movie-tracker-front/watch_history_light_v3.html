@@ -3,12 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Movie Tracker · История просмотра</title>
-    <link rel="stylesheet" href="./watch-history.css" />
+    <title>Movie Tracker</title>
+    <script>
+      (() => {
+        const nextUrl = new URL("./pages/watch-history.html", window.location.href);
+        nextUrl.search = window.location.search;
+        nextUrl.hash = window.location.hash;
+        window.location.replace(nextUrl.href);
+      })();
+    </script>
   </head>
-  <body>
-    <main id="watch-history-app"></main>
-    <script src="./common-ui.js"></script>
-    <script src="./watch-history.js"></script>
-  </body>
+  <body></body>
 </html>

@@ -3,13 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Movie Tracker · Страница фильма</title>
-    <link rel="stylesheet" href="./watch-history.css" />
-    <link rel="stylesheet" href="./movie-detail.css" />
+    <title>Movie Tracker</title>
+    <script>
+      (() => {
+        const nextUrl = new URL("./pages/movie-detail.html", window.location.href);
+        nextUrl.search = window.location.search;
+        nextUrl.hash = window.location.hash;
+        window.location.replace(nextUrl.href);
+      })();
+    </script>
   </head>
-  <body>
-    <main id="movie-detail-app"></main>
-    <script src="./common-ui.js"></script>
-    <script src="./movie-detail.js"></script>
-  </body>
+  <body></body>
 </html>
