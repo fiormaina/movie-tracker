@@ -339,6 +339,10 @@
       stagingRoot.setAttribute("aria-hidden", "true");
       currentRoot.insertAdjacentElement("afterend", stagingRoot);
 
+      if (!options.fromPopState) {
+        window.history.pushState({ softNav: true }, "", targetUrl.href);
+      }
+
       await loadPageScripts(nextDocument, targetUrl.href);
 
       if (token !== navigationToken) {
@@ -364,10 +368,6 @@
       document.title = nextDocument.title || document.title;
       resetStagingRoot(stagingRoot);
       currentRoot.replaceWith(stagingRoot);
-
-      if (!options.fromPopState) {
-        window.history.pushState({ softNav: true }, "", targetUrl.href);
-      }
 
       window.scrollTo({ top: 0, behavior: "auto" });
     } catch (error) {
