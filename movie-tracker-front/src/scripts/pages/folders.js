@@ -275,7 +275,11 @@
 
   function renderCreateFieldError(fieldName) {
     const message = state.createOverlay.errors[fieldName];
-    return message ? `<span class="folders-create__error">${escapeHtml(message)}</span>` : "";
+    return `
+      <span class="folders-create__error" data-create-error="${escapeHtml(fieldName)}">
+        ${message ? escapeHtml(message) : ""}
+      </span>
+    `;
   }
 
   function renderCreateOverlay() {
@@ -312,7 +316,7 @@
         </div>
       `,
       `
-        <div class="modal-card__footer modal-card__footer--split">
+        <div class="modal-card__footer folders-create__footer">
           <button class="modal-card__secondary" type="button" data-create-cancel ${state.createOverlay.loading ? "disabled" : ""}>Отмена</button>
           <button class="modal-card__confirm" type="button" data-create-confirm ${canSubmitCreateFolder() ? "" : "disabled"}>
             ${state.createOverlay.loading ? "Создаем..." : "Создать"}
@@ -391,6 +395,28 @@
     nextField.focus();
     if (typeof selectionStart === "number" && typeof nextField.setSelectionRange === "function") {
       nextField.setSelectionRange(selectionStart, selectionEnd ?? selectionStart);
+    }
+  }
+
+  function syncCreateOverlayControls() {
+    const confirmButton = rootElement?.querySelector("[data-create-confirm]");
+    if (confirmButton) {
+      confirmButton.disabled = !canSubmitCreateFolder();
+    }
+  }
+
+  function clearCreateFieldError(fieldName, fieldElement) {
+    const targetField =
+      fieldElement instanceof HTMLElement
+        ? fieldElement
+        : rootElement?.querySelector(`[data-create-field="${fieldName}"]`);
+    if (!targetField) return;
+
+    targetField.classList.remove("folders-create__input--error");
+
+    const errorElement = rootElement?.querySelector(`[data-create-error="${fieldName}"]`);
+    if (errorElement) {
+      errorElement.textContent = "";
     }
   }
 
@@ -661,12 +687,15 @@
   function handleRootInput(event) {
     const createField = event.target.closest("[data-create-field]");
     if (createField) {
-      const selectionStart = createField.selectionStart;
-      const selectionEnd = createField.selectionEnd;
-      state.createOverlay.form[createField.dataset.createField] = createField.value;
-      delete state.createOverlay.errors[createField.dataset.createField];
-      renderApp();
-      restoreCreateFieldFocus(createField.dataset.createField, selectionStart, selectionEnd);
+      const fieldName = createField.dataset.createField;
+      if (!fieldName) return;
+
+      state.createOverlay.form[fieldName] = createField.value;
+      if (state.createOverlay.errors[fieldName]) {
+        delete state.createOverlay.errors[fieldName];
+        clearCreateFieldError(fieldName, createField);
+      }
+      syncCreateOverlayControls();
       return;
     }
 

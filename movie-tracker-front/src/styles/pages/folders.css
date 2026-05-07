@@ -85,6 +85,11 @@
   gap: 12px;
 }
 
+.folders-create__footer {
+  justify-content: flex-end;
+  gap: 12px;
+}
+
 .modal-card__confirm--danger {
   border-color: rgba(217, 75, 95, 0.26);
   background: var(--danger-soft);
@@ -145,6 +150,8 @@
 }
 
 .folders-create__error {
+  display: block;
+  min-height: 1.2em;
   color: var(--danger);
   font-size: 0.9rem;
 }
@@ -186,12 +193,8 @@
     display: none;
   }
 
-  .modal-card__footer--split {
-    flex-direction: column-reverse;
-  }
-
-  .modal-card__secondary,
-  .modal-card__confirm {
-    width: 100%;
+  .folders-create__footer {
+    justify-content: flex-end;
+    flex-wrap: wrap;
   }
 }
