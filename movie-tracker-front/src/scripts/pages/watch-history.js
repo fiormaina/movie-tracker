@@ -266,8 +266,46 @@ function getMovieDetailUrl(id) {
   return routes.movieDetail({ id });
 }
 
+function getContinueUrl(item) {
+  if (!item || typeof item !== "object") return "";
+
+  const candidateKeys = [
+    "continueUrl",
+    "continue_url",
+    "watchUrl",
+    "watch_url",
+    "sourceUrl",
+    "source_url",
+    "pageUrl",
+    "page_url",
+    "url",
+  ];
+
+  for (const key of candidateKeys) {
+    const value = item[key];
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return "";
+}
+
 function openMovieDetail(id) {
   navigateToPage(getMovieDetailUrl(id));
+}
+
+function openContinueTarget(id) {
+  const item = getItemById(id);
+  if (!item) return;
+
+  const continueUrl = getContinueUrl(item);
+  if (continueUrl) {
+    window.location.href = new URL(continueUrl, window.location.href).href;
+    return;
+  }
+
+  openMovieDetail(id);
 }
 
 function updateItemInState(id, patch) {
@@ -1193,7 +1231,7 @@ function handleRootClick(event) {
     }
 
     if (action === "open-detail") {
-      openMovieDetail(id);
+      openContinueTarget(id);
       return;
     }
 
