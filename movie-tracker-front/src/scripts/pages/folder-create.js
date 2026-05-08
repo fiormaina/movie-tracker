@@ -4,7 +4,6 @@
   const { createPrimaryTabs, renderAppHeader, renderBackLink } = window.MovieTrackerAppShell;
   const { createFolder, getFolderLimits, getFolderPageUrl } = window.MovieTrackerFolders;
   const routes = window.MovieTrackerRoutes;
-  const PENDING_SEARCH_KEY = "movieTracker.openFolderSearch";
   const PENDING_TOAST_KEY = "movieTracker.pendingFolderToast";
 
   const limits = getFolderLimits();
@@ -117,20 +116,24 @@
     rootElement.innerHTML = renderPage();
   }
 
+  function syncFormDom(fieldName = "") {
+    const submitButton = rootElement?.querySelector('[data-action="submit"]');
+    if (submitButton) {
+      submitButton.disabled = !canSubmit();
+    }
+
+    if (!fieldName) return;
+
+    const field = rootElement?.querySelector(`[data-field="${fieldName}"]`);
+    if (!field) return;
+
+    field.classList.remove("folder-create__input--error", "folder-create__textarea--error");
+    field.closest(".folder-create__field")?.querySelector(".folder-create__error")?.remove();
+  }
+
   function updateField(fieldName, value) {
     state.form[fieldName] = value;
     delete state.errors[fieldName];
-    renderApp();
-  }
-
-  function restoreFieldFocus(fieldName, selectionStart, selectionEnd) {
-    const nextField = rootElement?.querySelector(`[data-field="${fieldName}"]`);
-    if (!nextField) return;
-
-    nextField.focus();
-    if (typeof selectionStart === "number" && typeof nextField.setSelectionRange === "function") {
-      nextField.setSelectionRange(selectionStart, selectionEnd ?? selectionStart);
-    }
   }
 
   async function handleSubmit() {
@@ -151,10 +154,6 @@
       window.sessionStorage.setItem(
         PENDING_TOAST_KEY,
         JSON.stringify({ message: "Папка создана", type: "success" }),
-      );
-      window.sessionStorage.setItem(
-        PENDING_SEARCH_KEY,
-        JSON.stringify({ folderId: folder.id }),
       );
       navigateToPage(getFolderPageUrl(folder.id));
     } catch (error) {
@@ -203,10 +202,8 @@
     const field = event.target.closest("[data-field]");
     if (!field) return;
 
-    const selectionStart = field.selectionStart;
-    const selectionEnd = field.selectionEnd;
     updateField(field.dataset.field, field.value);
-    restoreFieldFocus(field.dataset.field, selectionStart, selectionEnd);
+    syncFormDom(field.dataset.field);
   }
 
   function initFolderCreatePage() {

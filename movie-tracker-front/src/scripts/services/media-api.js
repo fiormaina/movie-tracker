@@ -2,7 +2,48 @@
   const apiClient = window.MovieTrackerApiClient;
 
   function cloneWatchItems(items = []) {
-    return items.map((item) => ({ ...item }));
+    return items.map((item) => normalizeWatchItem(item));
+  }
+
+  function normalizeGenres(genres) {
+    return Array.isArray(genres)
+      ? genres.map((genre) => String(genre ?? "").trim()).filter(Boolean)
+      : [];
+  }
+
+  function normalizeMeta(value) {
+    return String(value ?? "")
+      .split("·")
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .join(" · ");
+  }
+
+  function normalizeRatingValue(value) {
+    if (value === null || value === undefined) return null;
+
+    if (typeof value === "string") {
+      const trimmedValue = value.trim();
+      if (!trimmedValue) return null;
+
+      const numericStringValue = Number(trimmedValue);
+      if (Number.isFinite(numericStringValue)) {
+        return numericStringValue > 0 ? numericStringValue : null;
+      }
+
+      return trimmedValue;
+    }
+
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : null;
+  }
+
+  function normalizeWatchItem(item = {}) {
+    return {
+      ...item,
+      meta: normalizeMeta(item.meta),
+      rating: normalizeRatingValue(item.rating),
+    };
   }
 
   function cloneMovie(movie) {
@@ -10,7 +51,9 @@
 
     return {
       ...movie,
-      genres: Array.isArray(movie.genres) ? [...movie.genres] : [],
+      genres: normalizeGenres(movie.genres),
+      imdbRating: normalizeRatingValue(movie.imdbRating),
+      userRating: normalizeRatingValue(movie.userRating),
     };
   }
 
@@ -59,9 +102,9 @@
             method: "POST",
             body: JSON.stringify(payload),
           }, { namespace: "watch-history" });
-          return unwrapEntity(data, null) ?? createFallbackWatchItem(payload);
+          return normalizeWatchItem(unwrapEntity(data, null) ?? createFallbackWatchItem(payload));
         },
-        async () => createFallbackWatchItem(payload),
+        async () => normalizeWatchItem(createFallbackWatchItem(payload)),
       );
     },
 
@@ -72,9 +115,9 @@
             method: "PATCH",
             body: JSON.stringify(patch),
           }, { namespace: "watch-history" });
-          return unwrapEntity(data, null) ?? createFallbackMoviePatch(id, patch);
+          return normalizeWatchItem(unwrapEntity(data, null) ?? createFallbackMoviePatch(id, patch));
         },
-        async () => createFallbackMoviePatch(id, patch),
+        async () => normalizeWatchItem(createFallbackMoviePatch(id, patch)),
       );
     },
 

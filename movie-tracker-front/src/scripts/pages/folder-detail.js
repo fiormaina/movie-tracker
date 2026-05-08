@@ -60,6 +60,31 @@
   let searchRequestToken = 0;
   const showToast = createToastController(setState);
 
+  function normalizeMetaText(value) {
+    return String(value ?? "")
+      .split("·")
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .join(" · ");
+  }
+
+  function hasDisplayValue(value) {
+    if (value === null || value === undefined) return false;
+    if (typeof value === "number") return Number.isFinite(value) && value > 0;
+    return String(value).trim().length > 0;
+  }
+
+  function renderMetaParagraph(className, value) {
+    const text = normalizeMetaText(value);
+    return text ? `<p class="${className}">${escapeHtml(text)}</p>` : "";
+  }
+
+  function renderBadge(value) {
+    return hasDisplayValue(value)
+      ? `<span class="folder-detail__item-badge">${escapeHtml(String(value).trim())}</span>`
+      : "";
+  }
+
   function cloneState(value) {
     return {
       ...value,
@@ -256,7 +281,7 @@
               data-edit-visibility="private"
               ${state.pendingAction ? "disabled" : ""}
             >
-              Личная
+              Приватная
             </button>
             <button
               class="folder-detail__switch-button ${state.form.visibility === "public" ? "folder-detail__switch-button--active" : ""}"
@@ -290,11 +315,11 @@
         <div class="folder-detail__result-main">
           <h3 class="folder-detail__result-title">${escapeHtml(result.title)}</h3>
           <p class="folder-detail__result-row">
-            <span class="folder-detail__item-badge">${escapeHtml(result.typeLabel)}</span>
-            <span class="folder-detail__item-badge">${escapeHtml(String(result.year))}</span>
-            <span class="folder-detail__item-badge">${escapeHtml(result.watchStatusLabel)}</span>
+            ${renderBadge(result.typeLabel)}
+            ${renderBadge(result.year)}
+            ${renderBadge(result.watchStatusLabel)}
           </p>
-          <p class="folder-detail__result-meta">${escapeHtml(result.meta)}</p>
+          ${renderMetaParagraph("folder-detail__result-meta", result.meta)}
         </div>
         <div class="folder-detail__search-actions">
           <button class="profile-button ${exists ? "" : "profile-button--primary"}" type="button" data-action="add-item" data-id="${result.id}" ${(exists || state.pendingAction) ? "disabled" : ""}>
@@ -379,12 +404,12 @@
         <div class="folder-detail__item-main">
           <h3 class="folder-detail__item-title">${escapeHtml(item.title)}</h3>
           <p class="folder-detail__item-row">
-            <span class="folder-detail__item-badge">${escapeHtml(String(item.year))}</span>
-            <span class="folder-detail__item-badge">${escapeHtml(item.typeLabel)}</span>
-            <span class="folder-detail__item-badge">${escapeHtml(item.watchStatusLabel)}</span>
+            ${renderBadge(item.year)}
+            ${renderBadge(item.typeLabel)}
+            ${renderBadge(item.watchStatusLabel)}
             ${item.userRating ? `<span class="folder-detail__item-rating"><svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true"><polygon points="7,1 8.8,5 13,5.5 10,8.4 10.9,12.5 7,10.5 3.1,12.5 4,8.4 1,5.5 5.2,5"></polygon></svg>${item.userRating}</span>` : ""}
           </p>
-          <p class="folder-detail__item-meta">${escapeHtml(item.meta)}</p>
+          ${renderMetaParagraph("folder-detail__item-meta", item.meta)}
           <p class="folder-detail__item-date">Добавлено ${escapeHtml(item.addedAtLabel)}</p>
         </div>
         ${ownerControls}
@@ -544,7 +569,7 @@
       });
 
       if (result.status === "ok") {
-        const shouldOpenSearch = consumePendingSearch(result.folder.id);
+        consumePendingSearch(result.folder.id);
         const pendingSource = consumePendingFolderSource(result.folder.id);
         setState((currentState) => ({
           ...currentState,
@@ -555,7 +580,7 @@
           search: {
             ...currentState.search,
             open: result.folder.role === "owner",
-            activated: result.folder.role === "owner" ? Boolean(shouldOpenSearch || pendingSource?.title) : false,
+            activated: result.folder.role === "owner" ? Boolean(pendingSource?.title) : false,
             loading: false,
             recentItems: [],
             results: [],
@@ -568,7 +593,7 @@
         if (result.folder.role === "owner") {
           hydrateRecentMedia();
         }
-        if (shouldOpenSearch || pendingSource?.title) {
+        if (pendingSource?.title) {
           window.requestAnimationFrame(restoreSearchFocus);
         }
         if (pendingSource) {

@@ -266,6 +266,30 @@ function getMovieDetailUrl(id) {
   return routes.movieDetail({ id });
 }
 
+function hasDisplayValue(value) {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "number") return Number.isFinite(value) && value > 0;
+  return String(value).trim().length > 0;
+}
+
+function normalizeMeta(value) {
+  return String(value ?? "")
+    .split("·")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function normalizeHistoryItem(item = {}) {
+  const numericRating = Number(item.rating);
+
+  return {
+    ...item,
+    meta: normalizeMeta(item.meta),
+    rating: Number.isFinite(numericRating) && numericRating > 0 ? numericRating : null,
+  };
+}
+
 function getContinueUrl(item) {
   if (!item || typeof item !== "object") return "";
 
@@ -291,6 +315,39 @@ function getContinueUrl(item) {
   return "";
 }
 
+function resolveContinueUrl(item) {
+  const continueUrl = getContinueUrl(item);
+  if (!continueUrl) {
+    return {
+      ok: false,
+      reason: "missing",
+      message: "Ссылка на просмотр недоступна. Обновите запись или запустите просмотр снова.",
+    };
+  }
+
+  try {
+    const resolvedUrl = new URL(continueUrl, window.location.href);
+    if (!["http:", "https:"].includes(resolvedUrl.protocol)) {
+      return {
+        ok: false,
+        reason: "invalid",
+        message: "Не удалось открыть ссылку на просмотр. Проверьте запись и попробуйте снова.",
+      };
+    }
+
+    return {
+      ok: true,
+      href: resolvedUrl.href,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: "invalid",
+      message: "Не удалось открыть ссылку на просмотр. Проверьте запись и попробуйте снова.",
+    };
+  }
+}
+
 function openMovieDetail(id) {
   navigateToPage(getMovieDetailUrl(id));
 }
@@ -299,13 +356,13 @@ function openContinueTarget(id) {
   const item = getItemById(id);
   if (!item) return;
 
-  const continueUrl = getContinueUrl(item);
-  if (continueUrl) {
-    window.location.href = new URL(continueUrl, window.location.href).href;
+  const continueTarget = resolveContinueUrl(item);
+  if (!continueTarget.ok) {
+    showToast(continueTarget.message, "error");
     return;
   }
 
-  openMovieDetail(id);
+  window.location.href = continueTarget.href;
 }
 
 function updateItemInState(id, patch) {
@@ -379,12 +436,14 @@ function renderFilters(filters) {
 }
 
 function renderRating(value) {
+  if (!hasDisplayValue(value)) return "";
+
   return `
     <span class="watch-card__rating">
       <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor" aria-hidden="true">
         <polygon points="7,1 8.8,5 13,5.5 10,8.4 10.9,12.5 7,10.5 3.1,12.5 4,8.4 1,5.5 5.2,5"></polygon>
       </svg>
-      ${value || "—"}
+      ${value}
     </span>
   `;
 }
@@ -420,6 +479,7 @@ function renderCardActions(item) {
 function renderCard(item) {
   const shouldShowBadge = item.status !== "completed" && item.badge;
   const shouldShowContinue = item.status !== "completed";
+  const metaText = normalizeMeta(item.meta);
 
   return `
     <article
@@ -442,7 +502,7 @@ function renderCard(item) {
       </div>
       <div class="watch-card__body">
         <h3 class="watch-card__title">${item.title}</h3>
-        <p class="watch-card__meta">${item.meta}</p>
+        ${metaText ? `<p class="watch-card__meta">${metaText}</p>` : ""}
         <div class="watch-card__footer">
           ${renderRating(item.rating)}
           ${
@@ -817,7 +877,7 @@ async function hydrateWatchHistory() {
 
     setState((currentState) => ({
       ...currentState,
-      items: items.map((item) => ({ ...item })),
+      items: items.map((item) => normalizeHistoryItem(item)),
     }));
   } catch (error) {
     console.error(error);

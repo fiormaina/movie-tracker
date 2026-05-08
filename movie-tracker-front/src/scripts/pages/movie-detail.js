@@ -153,7 +153,7 @@ function getInitialMovieFromUrl() {
   return {
     ...movie,
     id: movieId || movie.id,
-    genres: [...movie.genres],
+    genres: normalizeGenres(movie.genres),
   };
 }
 
@@ -181,12 +181,24 @@ const showToast = createToastController(setState);
 function cloneState(value) {
   return {
     ...value,
-    movie: { ...value.movie, genres: [...value.movie.genres] },
+    movie: { ...value.movie, genres: normalizeGenres(value.movie.genres) },
     tabs: value.tabs.map((tab) => ({ ...tab })),
     ratingOverlay: { ...value.ratingOverlay },
     folderOverlay: { ...value.folderOverlay },
     toasts: [...value.toasts],
   };
+}
+
+function normalizeGenres(genres) {
+  return Array.isArray(genres)
+    ? genres.map((genre) => String(genre ?? "").trim()).filter(Boolean)
+    : [];
+}
+
+function hasDisplayValue(value) {
+  if (value === null || value === undefined) return false;
+  if (typeof value === "number") return Number.isFinite(value) && value > 0;
+  return String(value).trim().length > 0;
 }
 
 function setState(updater, options = {}) {
@@ -199,9 +211,49 @@ function setState(updater, options = {}) {
 }
 
 function renderMovieDetail(movie) {
+  const genres = normalizeGenres(movie.genres);
+  const facts = [movie.type, movie.year, movie.duration].filter(hasDisplayValue);
   const folderButtonLabel = movie.folderId ? "В папке" : "Добавить в папку";
   const watchedButtonLabel = movie.watched ? "Просмотрено" : "Отметить просмотренным";
   const ratingLabel = movie.userRating ? `Ваша оценка: ${movie.userRating}` : "Оценить";
+  const genresMarkup = genres.length
+    ? `
+          <div class="movie-detail__genres">
+            ${genres.map((genre) => `<span class="movie-detail__chip">${genre}</span>`).join("")}
+          </div>
+        `
+    : "";
+  const factsMarkup = facts.length
+    ? `
+          <ul class="movie-detail__facts" aria-label="Информация о фильме">
+            ${facts.map((fact) => `<li class="movie-detail__fact">${fact}</li>`).join("")}
+          </ul>
+        `
+    : "";
+  const ratingValueMarkup = hasDisplayValue(movie.imdbRating)
+    ? `
+            <div class="movie-detail__rating-top">
+              <span class="movie-detail__rating-label">Рейтинг</span>
+            </div>
+            <div class="movie-detail__rating-value">
+              <span class="movie-detail__rating-number">${String(movie.imdbRating).trim()}</span>
+              <span class="movie-detail__imdb">imdb</span>
+            </div>
+          `
+    : "";
+  const ratingMarkup = `
+        <aside class="movie-detail__aside" aria-label="Оценка">
+          <section class="movie-detail__rating-card">
+            ${ratingValueMarkup}
+            <button class="movie-detail__rate" type="button" data-action="rate">
+              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                <path d="M9 2.3L10.93 6.21L15.25 6.84L12.13 9.88L12.87 14.18L9 12.14L5.13 14.18L5.87 9.88L2.75 6.84L7.07 6.21L9 2.3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path>
+              </svg>
+              ${ratingLabel}
+            </button>
+          </section>
+        </aside>
+      `;
 
   return `
     <section class="movie-detail" aria-label="Карточка фильма">
@@ -225,15 +277,8 @@ function renderMovieDetail(movie) {
 
         <div class="movie-detail__main">
           <h1 class="movie-detail__title">${movie.title}</h1>
-          <div class="movie-detail__genres">
-            ${movie.genres.map((genre) => `<span class="movie-detail__chip">${genre}</span>`).join("")}
-          </div>
-
-          <ul class="movie-detail__facts" aria-label="Информация о фильме">
-            <li class="movie-detail__fact">${movie.type}</li>
-            <li class="movie-detail__fact">${movie.year}</li>
-            <li class="movie-detail__fact">${movie.duration}</li>
-          </ul>
+          ${genresMarkup}
+          ${factsMarkup}
 
           <p class="movie-detail__description">${movie.description}</p>
 
@@ -260,23 +305,7 @@ function renderMovieDetail(movie) {
           </div>
         </div>
 
-        <aside class="movie-detail__aside" aria-label="Оценка">
-          <section class="movie-detail__rating-card">
-            <div class="movie-detail__rating-top">
-              <span class="movie-detail__rating-label">Рейтинг</span>
-            </div>
-            <div class="movie-detail__rating-value">
-              <span class="movie-detail__rating-number">${movie.imdbRating}</span>
-              <span class="movie-detail__imdb">imdb</span>
-            </div>
-            <button class="movie-detail__rate" type="button" data-action="rate">
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-                <path d="M9 2.3L10.93 6.21L15.25 6.84L12.13 9.88L12.87 14.18L9 12.14L5.13 14.18L5.87 9.88L2.75 6.84L7.07 6.21L9 2.3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path>
-              </svg>
-              ${ratingLabel}
-            </button>
-          </section>
-        </aside>
+        ${ratingMarkup}
 
         <section class="movie-detail__comments" aria-label="Комментарии">
           <h2 class="movie-detail__comments-title">Комментарии</h2>
@@ -433,7 +462,7 @@ async function hydrateMovieDetail() {
       movie: {
         ...currentState.movie,
         ...movie,
-        genres: Array.isArray(movie.genres) ? [...movie.genres] : [...currentState.movie.genres],
+        genres: movie.genres !== undefined ? normalizeGenres(movie.genres) : normalizeGenres(currentState.movie.genres),
       },
     }));
   } catch (error) {
