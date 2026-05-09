@@ -825,10 +825,12 @@ function renderManualOverlay(overlay) {
     `,
     `
       <div class="modal-card__footer modal-card__footer--split">
-        <button class="modal-card__cancel" type="button" data-manual-cancel>Отмена</button>
-        <button class="modal-card__confirm" type="button" data-manual-confirm ${overlay.loading ? "disabled" : ""}>
-          ${overlay.loading ? "Добавляем..." : "Добавить"}
-        </button>
+        <div class="manual-form__actions">
+          <button class="modal-card__cancel" type="button" data-manual-cancel>Отмена</button>
+          <button class="modal-card__confirm" type="button" data-manual-confirm ${overlay.loading ? "disabled" : ""}>
+            ${overlay.loading ? "Добавляем..." : "Добавить"}
+          </button>
+        </div>
       </div>
     `,
     "manual",

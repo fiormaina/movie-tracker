@@ -650,6 +650,15 @@
   width: fit-content;
 }
 
+.manual-form__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  width: fit-content;
+  margin-left: auto;
+}
+
 .manual-form__switch-button,
 .manual-form__chip {
   min-height: 38px;
