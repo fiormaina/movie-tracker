@@ -23,6 +23,7 @@
     getFolderPublicUrl,
     getProfileUrl,
     getProfileView,
+    readState,
     saveFolder,
     unfollowUser,
     upsertUser,
@@ -58,6 +59,10 @@
       avatarImage: "",
       confirmDelete: false,
     },
+    socialOverlay: {
+      isOpen: false,
+      kind: "following",
+    },
     toasts: [],
   };
 
@@ -77,6 +82,7 @@
       })),
       pendingFolderIds: new Set(value.pendingFolderIds ?? []),
       editProfileOverlay: { ...value.editProfileOverlay },
+      socialOverlay: { ...value.socialOverlay },
       toasts: [...value.toasts],
     };
   }
@@ -128,11 +134,13 @@
         source.avatarUrl ??
         fallbackUser.avatarImage ??
         "",
-      profileUrl:
+      profileUrl: routes.resolveAppUrl(
         source.profileUrl ??
-        source.profile_url ??
-        fallbackUser.profileUrl ??
+          source.profile_url ??
+          fallbackUser.profileUrl,
         getProfileUrl(username, true),
+        { absolute: true },
+      ),
     };
   }
 
@@ -329,6 +337,7 @@
       editProfileOverlay: ownRoute
         ? currentState.editProfileOverlay
         : { ...initialState.editProfileOverlay },
+      socialOverlay: { ...initialState.socialOverlay },
     }));
   }
 
@@ -401,15 +410,29 @@
         <div class="profile-hero__info">
           <span class="profile-hero__label">${state.isOwner ? "Ваш профиль" : "Публичный профиль"}</span>
           <h1 class="profile-hero__name">${escapeHtml(state.user.displayName)}</h1>
-          <p class="profile-hero__meta">
+          <div class="profile-hero__meta">
             <span>@${escapeHtml(state.user.username)}</span>
             <span class="profile-hero__dot" aria-hidden="true"></span>
-            <span>${state.user.followingCount} подписок</span>
+            <button
+              class="profile-hero__meta-button"
+              type="button"
+              data-action="open-social-overlay"
+              data-social-kind="following"
+            >
+              ${state.user.followingCount} подписок
+            </button>
             <span class="profile-hero__dot" aria-hidden="true"></span>
-            <span>${state.user.followersCount} подписчиков</span>
+            <button
+              class="profile-hero__meta-button"
+              type="button"
+              data-action="open-social-overlay"
+              data-social-kind="followers"
+            >
+              ${state.user.followersCount} подписчиков
+            </button>
             <span class="profile-hero__dot" aria-hidden="true"></span>
             <span>${state.publicFolders.length} публичных папок</span>
-          </p>
+          </div>
         </div>
         <div class="profile-hero__actions">
           <button class="profile-button" type="button" data-action="copy-profile-link">
@@ -681,6 +704,134 @@
     `;
   }
 
+  function getSocialOverlayTitle(kind) {
+    return kind === "followers" ? "Подписчики" : "Подписки";
+  }
+
+  function getSocialOverlayEmptyText(kind) {
+    if (kind === "followers") {
+      return state.isOwner
+        ? "У вас пока нет подписчиков."
+        : "У пользователя пока нет подписчиков.";
+    }
+
+    return state.isOwner
+      ? "У вас пока нет подписок."
+      : "Пользователь пока ни на кого не подписан.";
+  }
+
+  function getFollowingCountFromStore(storeState, userId) {
+    return Array.isArray(storeState.followingByUserId?.[userId])
+      ? storeState.followingByUserId[userId].length
+      : 0;
+  }
+
+  function getFollowersCountFromStore(storeState, userId) {
+    return Object.values(storeState.followingByUserId ?? {}).reduce(
+      (count, followedIds) =>
+        count + (Array.isArray(followedIds) && followedIds.includes(userId) ? 1 : 0),
+      0,
+    );
+  }
+
+  function getSocialOverlayUsers(kind) {
+    if (!state.user) return [];
+
+    const storeState = readState();
+    const followingMap = storeState.followingByUserId ?? {};
+    const relatedIds = kind === "followers"
+      ? Object.entries(followingMap)
+        .filter(([, followedIds]) => Array.isArray(followedIds) && followedIds.includes(state.user.id))
+        .map(([userId]) => userId)
+      : [...new Set(Array.isArray(followingMap[state.user.id]) ? followingMap[state.user.id] : [])];
+
+    return relatedIds
+      .map((userId) => {
+        const user = storeState.users?.[userId] ?? null;
+        if (!user?.id) return null;
+
+        return {
+          id: user.id,
+          username: user.username,
+          displayName: user.displayName || DEFAULT_DISPLAY_NAME,
+          avatarKey: user.avatarKey || defaultAvatarKey,
+          avatarImage: user.avatarImage || "",
+          profileUrl: getProfileUrl(user.username, false),
+          followingCount: getFollowingCountFromStore(storeState, user.id),
+          followersCount: getFollowersCountFromStore(storeState, user.id),
+          isViewer: user.id === state.viewerId,
+        };
+      })
+      .filter(Boolean)
+      .sort((left, right) => left.displayName.localeCompare(right.displayName, "ru"));
+  }
+
+  function renderSocialOverlay() {
+    if (!state.socialOverlay.isOpen || !state.user) return "";
+
+    const title = getSocialOverlayTitle(state.socialOverlay.kind);
+    const items = getSocialOverlayUsers(state.socialOverlay.kind);
+    const body = items.length
+      ? `
+        <div class="modal-card__body">
+          <div class="profile-social-list" role="list" aria-label="${escapeHtml(title)}">
+            ${items
+              .map(
+                (item) => `
+                  <button class="profile-social-item" type="button" data-nav-url="${escapeHtml(item.profileUrl)}" role="listitem">
+                    <span class="profile-social-item__avatar">
+                      ${renderUserAvatar({
+                        avatarKey: item.avatarKey,
+                        avatarImage: item.avatarImage,
+                        size: 52,
+                        className: "profile-social-item__avatar-visual",
+                        iconSize: 22,
+                      })}
+                    </span>
+                    <span class="profile-social-item__content">
+                      <span class="profile-social-item__title-row">
+                        <span class="profile-social-item__name">${escapeHtml(item.displayName)}</span>
+                        ${item.isViewer ? '<span class="profile-social-item__badge">Вы</span>' : ""}
+                      </span>
+                      <span class="profile-social-item__username">@${escapeHtml(item.username)}</span>
+                      <span class="profile-social-item__stats">
+                        ${item.followingCount} подписок
+                        <span class="profile-social-item__dot" aria-hidden="true"></span>
+                        ${item.followersCount} подписчиков
+                      </span>
+                    </span>
+                  </button>
+                `,
+              )
+              .join("")}
+          </div>
+        </div>
+      `
+      : `
+        <div class="modal-card__body">
+          <div class="profile-social-empty" aria-live="polite">
+            <strong>${escapeHtml(title)}</strong>
+            <p>${escapeHtml(getSocialOverlayEmptyText(state.socialOverlay.kind))}</p>
+          </div>
+        </div>
+      `;
+
+    return `
+      <div class="modal-backdrop" data-modal-backdrop="social-profile-list">
+        <section class="modal-card profile-social-modal" role="dialog" aria-modal="true" aria-label="${escapeHtml(title)}">
+          <button class="modal-card__close" type="button" data-action="close-social-overlay" aria-label="Закрыть">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+              <path d="M4.5 4.5L13.5 13.5M13.5 4.5L4.5 13.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"></path>
+            </svg>
+          </button>
+          <h2 class="modal-card__title">${escapeHtml(title)}</h2>
+          <p class="profile-social-modal__hint">Нажмите на профиль, чтобы открыть страницу пользователя.</p>
+          ${body}
+        </section>
+      </div>
+    `;
+  }
+
   function renderStateCard(title, text, actionLabel = "", actionUrl = routes.profile()) {
     return renderPageState({
       className: "profile-empty-state profile-empty-state--page",
@@ -731,6 +882,7 @@
         ${renderToasts(state.toasts)}
         ${renderEditProfileOverlay()}
         ${renderDeleteConfirmOverlay()}
+        ${renderSocialOverlay()}
       </div>
     `;
   }
@@ -866,6 +1018,26 @@
     setState((currentState) => ({
       ...currentState,
       editProfileOverlay: { ...initialState.editProfileOverlay },
+    }));
+  }
+
+  function openSocialOverlay(kind) {
+    if (!state.user) return;
+    if (kind !== "following" && kind !== "followers") return;
+
+    setState((currentState) => ({
+      ...currentState,
+      socialOverlay: {
+        isOpen: true,
+        kind,
+      },
+    }));
+  }
+
+  function closeSocialOverlay() {
+    setState((currentState) => ({
+      ...currentState,
+      socialOverlay: { ...initialState.socialOverlay },
     }));
   }
 
@@ -1176,6 +1348,16 @@
         return;
       }
 
+      if (action === "open-social-overlay") {
+        openSocialOverlay(actionButton.dataset.socialKind);
+        return;
+      }
+
+      if (action === "close-social-overlay") {
+        closeSocialOverlay();
+        return;
+      }
+
       if (action === "save-profile") {
         saveProfile();
         return;
@@ -1226,6 +1408,11 @@
       return;
     }
 
+    if (event.target.dataset.modalBackdrop === "social-profile-list") {
+      closeSocialOverlay();
+      return;
+    }
+
     const folderCard = event.target.closest("[data-folder-card]");
     if (folderCard && !event.target.closest("button, a, input, textarea, select")) {
       openFolder(folderCard.dataset.folderCard);
@@ -1263,6 +1450,16 @@
   }
 
   function handleRootKeydown(event) {
+    if (event.key === "Escape" && state.editProfileOverlay.confirmDelete) {
+      cancelDeleteAccount();
+      return;
+    }
+
+    if (event.key === "Escape" && state.socialOverlay.isOpen) {
+      closeSocialOverlay();
+      return;
+    }
+
     if (event.key === "Escape" && state.editProfileOverlay.isOpen) {
       closeEditProfileOverlay();
       return;

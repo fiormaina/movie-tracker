@@ -2,7 +2,7 @@
   const { escapeHtml } = window.MovieTrackerUI;
 
   function renderOwnerBlock(folder) {
-    if (folder.isOwner) return "";
+    if (folder.isOwner || !String(folder.ownerName ?? "").trim()) return "";
 
     return `
       <div class="folder-card__owner">
@@ -21,6 +21,20 @@
     const copyTooltip = "Копировать ссылку";
     const deleteTooltip = folder.isOwner ? "Удалить" : "Удалить из сохраненных";
     const countText = options.countText ?? "";
+    const canRemoveFolder = !folder.isOwner || folder.canDelete !== false;
+    const deleteActionMarkup = canRemoveFolder
+      ? `
+            <div class="folder-card__action">
+              <span class="folder-card__tooltip">${deleteTooltip}</span>
+              <button class="folder-card__icon-button folder-card__icon-button--danger" type="button" data-action="delete-folder" data-id="${folder.id}" aria-label="${deleteTooltip}">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+                  <path d="M4.2 5.6H13.8" stroke="currentColor" stroke-width="1.55" stroke-linecap="round"></path>
+                  <path d="M7.2 3.8H10.8M6 5.6L6.45 14.1C6.49 14.73 7 15.2 7.63 15.2H10.37C11 15.2 11.51 14.73 11.55 14.1L12 5.6" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"></path>
+                </svg>
+              </button>
+            </div>
+          `
+      : "";
 
     return `
       <article
@@ -47,15 +61,7 @@
                 </svg>
               </button>
             </div>
-            <div class="folder-card__action">
-              <span class="folder-card__tooltip">${deleteTooltip}</span>
-              <button class="folder-card__icon-button folder-card__icon-button--danger" type="button" data-action="delete-folder" data-id="${folder.id}" aria-label="${deleteTooltip}">
-                <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-                  <path d="M4.2 5.6H13.8" stroke="currentColor" stroke-width="1.55" stroke-linecap="round"></path>
-                  <path d="M7.2 3.8H10.8M6 5.6L6.45 14.1C6.49 14.73 7 15.2 7.63 15.2H10.37C11 15.2 11.51 14.73 11.55 14.1L12 5.6" stroke="currentColor" stroke-width="1.55" stroke-linecap="round" stroke-linejoin="round"></path>
-                </svg>
-              </button>
-            </div>
+            ${deleteActionMarkup}
           </div>
         </div>
         <div class="folder-card__body">
