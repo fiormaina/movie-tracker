@@ -16,6 +16,8 @@ const API_V1_BASE_URL = `${API_BASE_URL}/api/v1`;
 const REGISTER_ENDPOINT = `${API_V1_BASE_URL}/auth/register`;
 const LOGIN_ENDPOINT = `${API_V1_BASE_URL}/auth/login`;
 const CURRENT_USER_STORAGE_KEY = "movieTracker.currentUser";
+const ACCESS_TOKEN_STORAGE_KEY = "movieTracker.accessToken";
+const APP_STATE_TRANSFER_HASH_KEY = String(window.MovieTrackerConfig?.appStateTransferHashKey ?? "movieTrackerState");
 const DEFAULT_DISPLAY_NAME = "Пользователь";
 const DEFAULT_AVATAR_KEY = "violet";
 const AUTH_TEMPORARY_ERROR_MESSAGE = "произошла ошибка, скоро все заработает";
@@ -368,6 +370,37 @@ function saveCurrentUser(user) {
   localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(user));
 }
 
+function encodeAppStateTransfer(state) {
+  const json = JSON.stringify(state);
+  return window.btoa(json).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function buildPostAuthRedirectUrl(targetPath, user) {
+  const absoluteTargetUrl = routes.resolveAppUrl(targetPath, targetPath, { absolute: true });
+  const redirectUrl = new URL(absoluteTargetUrl);
+  const currentAppOrigin = window.location.origin;
+
+  if (redirectUrl.origin === currentAppOrigin) {
+    return redirectUrl.href;
+  }
+
+  const accessToken = String(localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY) ?? "").trim();
+  const transferredState = {
+    apiBaseUrl: API_BASE_URL,
+    currentUser: user,
+  };
+
+  if (accessToken) {
+    transferredState.accessToken = accessToken;
+  }
+
+  const hashParams = new URLSearchParams(redirectUrl.hash.startsWith("#") ? redirectUrl.hash.slice(1) : redirectUrl.hash);
+  hashParams.set(APP_STATE_TRANSFER_HASH_KEY, encodeAppStateTransfer(transferredState));
+  redirectUrl.hash = hashParams.toString();
+
+  return redirectUrl.href;
+}
+
 async function sendAuthRequest(endpoint, payload) {
   const response = await fetch(endpoint, {
     method: "POST",
@@ -465,11 +498,13 @@ async function handleAuthSubmit(event) {
     const fallbackIdentifier = payload.email ?? payload.identifier;
 
     if (responseData?.access_token) {
-      localStorage.setItem("movieTracker.accessToken", responseData.access_token);
+      localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, responseData.access_token);
     }
 
-    saveCurrentUser(normalizeAuthUser(responseData, fallbackIdentifier));
-    window.location.href = type === "register" ? routes.profile() : routes.watchHistory;
+    const normalizedUser = normalizeAuthUser(responseData, fallbackIdentifier);
+    saveCurrentUser(normalizedUser);
+    const redirectTarget = type === "register" ? routes.profile() : routes.watchHistory;
+    window.location.href = buildPostAuthRedirectUrl(redirectTarget, normalizedUser);
   } catch (error) {
     console.error(error);
     setAuthRequestError(form, error);

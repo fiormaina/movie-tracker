@@ -12,7 +12,10 @@ const landingContent = {
 
 const CURRENT_USER_STORAGE_KEY = "movieTracker.currentUser";
 const API_BASE_URL_STORAGE_KEY = "movieTracker.apiBaseUrl";
+const ACCESS_TOKEN_STORAGE_KEY = "movieTracker.accessToken";
+const APP_STATE_TRANSFER_HASH_KEY = "movieTrackerState";
 const DEFAULT_LOCAL_API_BASE_URL = "http://127.0.0.1:8000";
+const DEFAULT_APP_BASE_URL = "https://fiormaina.github.io/movie-tracker/movie-tracker-front/";
 const DEFAULT_DISPLAY_NAME = "Пользователь";
 const AUTH_TEMPORARY_ERROR_MESSAGE = "произошла ошибка, скоро все заработает";
 
@@ -339,6 +342,21 @@ function normalizeApiBaseUrl(value) {
     .replace(/\/+$/, "");
 }
 
+function normalizeAppBaseUrl(value) {
+  const trimmedValue = String(value || "").trim();
+  if (!trimmedValue) return "";
+
+  try {
+    const normalizedUrl = new URL(trimmedValue, window.location.href);
+    normalizedUrl.pathname = normalizedUrl.pathname.replace(/\/?$/, "/");
+    normalizedUrl.search = "";
+    normalizedUrl.hash = "";
+    return normalizedUrl.href;
+  } catch (error) {
+    return "";
+  }
+}
+
 function persistApiBaseUrl(apiBaseUrl) {
   if (!apiBaseUrl) return;
 
@@ -373,6 +391,26 @@ function resolveApiBaseUrl() {
   }
 
   return DEFAULT_LOCAL_API_BASE_URL;
+}
+
+function resolveAppBaseUrl() {
+  const metaValue = normalizeAppBaseUrl(
+    document.querySelector('meta[name="movie-tracker-app-base-url"]')?.content,
+  );
+  if (metaValue) {
+    return metaValue;
+  }
+
+  const globalValue = normalizeAppBaseUrl(window.__MOVIE_TRACKER_CONFIG__?.appBaseUrl);
+  if (globalValue) {
+    return globalValue;
+  }
+
+  return normalizeAppBaseUrl(DEFAULT_APP_BASE_URL);
+}
+
+function resolveAppPageUrl(pathname) {
+  return new URL(pathname, resolveAppBaseUrl()).href;
 }
 
 function isLoopbackHttpApiBaseUrl(apiBaseUrl) {
@@ -428,12 +466,41 @@ function normalizeAuthUser(responseData, fallbackIdentifier) {
     followingCount: source.followingCount ?? 0,
     followersCount: source.followersCount ?? 0,
     extensionCode: source.extensionCode ?? "MT-USER-2026",
-    profileUrl: source.profileUrl ?? new URL("./pages/profile.html", window.location.href).href,
+    profileUrl: source.profileUrl ?? resolveAppPageUrl("./pages/profile.html"),
   };
 }
 
 function saveCurrentUser(user) {
   localStorage.setItem(CURRENT_USER_STORAGE_KEY, JSON.stringify(user));
+}
+
+function encodeAppStateTransfer(state) {
+  const json = JSON.stringify(state);
+  return window.btoa(json).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function buildPostAuthRedirectUrl(pathname, user) {
+  const redirectUrl = new URL(resolveAppPageUrl(pathname));
+
+  if (redirectUrl.origin === window.location.origin) {
+    return redirectUrl.href;
+  }
+
+  const accessToken = String(localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY) ?? "").trim();
+  const transferredState = {
+    apiBaseUrl: resolveApiBaseUrl(),
+    currentUser: user,
+  };
+
+  if (accessToken) {
+    transferredState.accessToken = accessToken;
+  }
+
+  const hashParams = new URLSearchParams(redirectUrl.hash.startsWith("#") ? redirectUrl.hash.slice(1) : redirectUrl.hash);
+  hashParams.set(APP_STATE_TRANSFER_HASH_KEY, encodeAppStateTransfer(transferredState));
+  redirectUrl.hash = hashParams.toString();
+
+  return redirectUrl.href;
 }
 
 async function sendAuthRequest(endpoint, payload) {
@@ -540,11 +607,13 @@ async function handleAuthSubmit(event) {
     const fallbackIdentifier = payload.email ?? payload.identifier;
 
     if (responseData?.access_token) {
-      localStorage.setItem("movieTracker.accessToken", responseData.access_token);
+      localStorage.setItem(ACCESS_TOKEN_STORAGE_KEY, responseData.access_token);
     }
 
-    saveCurrentUser(normalizeAuthUser(responseData, fallbackIdentifier));
-    window.location.href = type === "register" ? "./pages/profile.html" : "./pages/watch-history.html";
+    const normalizedUser = normalizeAuthUser(responseData, fallbackIdentifier);
+    saveCurrentUser(normalizedUser);
+    const redirectTarget = type === "register" ? "./pages/profile.html" : "./pages/watch-history.html";
+    window.location.href = buildPostAuthRedirectUrl(redirectTarget, normalizedUser);
   } catch (error) {
     console.error(error);
     setAuthRequestError(form, error);

@@ -1,5 +1,8 @@
 (() => {
   const projectRootPath = String(window.MovieTrackerConfig?.projectRootPath ?? "/");
+  const appBaseUrl = String(
+    window.MovieTrackerConfig?.appBaseUrl ?? new URL(projectRootPath, window.location.origin).href,
+  );
   const appPagePathByFileName = Object.freeze({
     "index.html": `${projectRootPath}index.html`,
     "watch-history.html": `${projectRootPath}pages/watch-history.html`,
@@ -12,7 +15,7 @@
   });
 
   function createRelativePath(pathname, params = {}) {
-    const url = new URL(pathname, window.location.origin);
+    const url = new URL(pathname, appBaseUrl);
     Object.entries(params).forEach(([key, value]) => {
       if (value === undefined || value === null || value === "") return;
       url.searchParams.set(key, value);
@@ -36,7 +39,7 @@
 
   function resolveAppUrl(value, fallbackPath = `${projectRootPath}index.html`, options = {}) {
     const fallbackRelativeUrl = createRelativePath(fallbackPath);
-    const fallbackAbsoluteUrl = new URL(fallbackRelativeUrl, window.location.origin);
+    const fallbackAbsoluteUrl = new URL(fallbackRelativeUrl, appBaseUrl);
     const shouldReturnAbsolute = options.absolute === true;
 
     if (typeof value !== "string" || !value.trim()) {
@@ -50,7 +53,7 @@
       const normalizedPathname = getNormalizedPathname(parsedUrl.pathname);
 
       if (isAppPathname(normalizedPathname)) {
-        const normalizedUrl = new URL(normalizedPathname, window.location.origin);
+        const normalizedUrl = new URL(normalizedPathname, appBaseUrl);
         normalizedUrl.search = parsedUrl.search;
         normalizedUrl.hash = parsedUrl.hash;
 
