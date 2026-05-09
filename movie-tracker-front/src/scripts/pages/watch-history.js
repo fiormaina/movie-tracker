@@ -350,7 +350,7 @@ function removePendingAction(key) {
 }
 
 function getSections(items) {
-  const watchingItems = items.filter((item) => item.status !== "completed");
+  const watchingItems = items.filter((item) => item.status === "watching");
   const completedItems = items
     .filter((item) => item.status === "completed")
     .sort((a, b) => new Date(b.watchedAt ?? b.updatedAt) - new Date(a.watchedAt ?? a.updatedAt));
@@ -358,7 +358,7 @@ function getSections(items) {
   return [
     { title: "Продолжить просмотр", items: watchingItems, folderKind: "watching" },
     { title: "Недавно просмотрено", items: completedItems, folderKind: "completed" },
-  ];
+  ].filter((section) => section.items.length > 0);
 }
 
 function normalizeFolderLookupValue(value) {
@@ -829,9 +829,10 @@ function renderOverlays() {
 function renderPage() {
   const stats = getHistoryStats(state.items);
   const visibleItems = getVisibleItems();
+  const sections = getSections(visibleItems);
   const content = state.items.length
-    ? visibleItems.length
-      ? renderSections(getSections(visibleItems))
+    ? sections.length
+      ? renderSections(sections)
       : renderFilteredEmptyState()
     : renderEmptyHistoryState();
 
