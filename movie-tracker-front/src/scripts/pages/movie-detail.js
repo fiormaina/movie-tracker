@@ -1,11 +1,12 @@
 (() => {
 const {
   autoSizeTextarea,
+  escapeHtml,
   navigateToPage,
   renderModalShell,
   renderToasts,
 } = window.MovieTrackerUI;
-const { createToastController, openContinueUrl } = window.MovieTrackerHelpers;
+const { createToastController, resolveContinueUrl } = window.MovieTrackerHelpers;
 const {
   createPrimaryTabs,
   renderAppHeader,
@@ -216,6 +217,24 @@ function renderMovieDetail(movie) {
   const folderButtonLabel = movie.folderId ? "В папке" : "Добавить в папку";
   const watchedButtonLabel = movie.watched ? "Просмотрено" : "Отметить просмотренным";
   const ratingLabel = movie.userRating ? `Ваша оценка: ${movie.userRating}` : "Оценить";
+  const continueTarget = resolveContinueUrl(movie);
+  const continueMarkup = continueTarget.ok
+    ? `
+            <a class="movie-detail__continue" href="${escapeHtml(continueTarget.href)}" target="_blank" rel="noopener noreferrer">
+              <svg width="16" height="16" viewBox="0 0 18 18" fill="currentColor" aria-hidden="true">
+                <path d="M5.5 3.8V14.2L14 9L5.5 3.8Z"></path>
+              </svg>
+              Продолжить просмотр
+            </a>
+          `
+    : `
+            <button class="movie-detail__continue" type="button" data-action="continue">
+              <svg width="16" height="16" viewBox="0 0 18 18" fill="currentColor" aria-hidden="true">
+                <path d="M5.5 3.8V14.2L14 9L5.5 3.8Z"></path>
+              </svg>
+              Продолжить просмотр
+            </button>
+          `;
   const genresMarkup = genres.length
     ? `
           <div class="movie-detail__genres">
@@ -283,12 +302,7 @@ function renderMovieDetail(movie) {
           <p class="movie-detail__description">${movie.description}</p>
 
           <div class="movie-detail__actions">
-            <button class="movie-detail__continue" type="button" data-action="continue">
-              <svg width="16" height="16" viewBox="0 0 18 18" fill="currentColor" aria-hidden="true">
-                <path d="M5.5 3.8V14.2L14 9L5.5 3.8Z"></path>
-              </svg>
-              Продолжить просмотр
-            </button>
+            ${continueMarkup}
             <div class="movie-detail__quick-actions">
               <button class="movie-detail__icon-button ${movie.folderId ? "movie-detail__icon-button--active" : ""}" type="button" data-action="add-to-folder" aria-label="${folderButtonLabel}" title="${folderButtonLabel}">
                 <svg width="20" height="20" viewBox="0 0 18 18" fill="none" aria-hidden="true">
@@ -630,7 +644,7 @@ async function markWatched() {
 }
 
 function continueWatching() {
-  const continueTarget = openContinueUrl(state.movie);
+  const continueTarget = resolveContinueUrl(state.movie);
   if (!continueTarget.ok) {
     showToast(continueTarget.message, "error");
   }

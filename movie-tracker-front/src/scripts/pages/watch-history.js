@@ -6,7 +6,7 @@ const {
   renderModalShell,
   renderToasts,
 } = window.MovieTrackerUI;
-const { createToastController, openContinueUrl, resolveContinueUrl } = window.MovieTrackerHelpers;
+const { createToastController, resolveContinueUrl } = window.MovieTrackerHelpers;
 const { createPrimaryTabs, renderAppFooter, renderAppHeader } = window.MovieTrackerAppShell;
 const {
   addItemToFolder,
@@ -356,10 +356,9 @@ function openContinueTarget(id) {
   const item = getItemById(id);
   if (!item) return;
 
-  const continueTarget = openContinueUrl(item);
+  const continueTarget = resolveContinueUrl(item);
   if (!continueTarget.ok) {
     showToast(continueTarget.message, "error");
-    return;
   }
 }
 
@@ -870,14 +869,38 @@ function renderApp() {
   rootElement.innerHTML = renderPage();
 }
 
+async function hydrateContinueUrls(items) {
+  const hydratedItems = await Promise.all(
+    items.map(async (item) => {
+      if (item.status === "completed" || resolveContinueUrl(item).ok) {
+        return item;
+      }
+
+      const detail = await watchHistoryApi.getMovieDetail(item.id, item);
+      if (!detail || typeof detail !== "object") {
+        return item;
+      }
+
+      return normalizeHistoryItem({
+        ...item,
+        ...detail,
+      });
+    }),
+  );
+
+  return hydratedItems;
+}
+
 async function hydrateWatchHistory() {
   try {
     const items = await watchHistoryApi.listWatchHistory(state.items);
     if (!Array.isArray(items)) return;
+    const normalizedItems = items.map((item) => normalizeHistoryItem(item));
+    const hydratedItems = await hydrateContinueUrls(normalizedItems);
 
     setState((currentState) => ({
       ...currentState,
-      items: items.map((item) => normalizeHistoryItem(item)),
+      items: hydratedItems,
     }));
   } catch (error) {
     console.error(error);
