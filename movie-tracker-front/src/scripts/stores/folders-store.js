@@ -520,6 +520,42 @@
     return value === null || value === undefined ? "" : String(value);
   }
 
+  function readRemoteFolderOwnerUsername(folder) {
+    const rawValue =
+      folder.ownerUsername ??
+      folder.owner_username ??
+      folder.owner?.username ??
+      folder.owner?.login ??
+      "";
+
+    return String(rawValue).trim().replace(/^@+/, "");
+  }
+
+  function readRemoteFolderPublicSlug(folder) {
+    return toIdString(folder.publicSlug ?? folder.public_slug).trim();
+  }
+
+  function buildCanonicalFolderPageUrl(folder, normalizedId) {
+    const rawPageUrl = typeof folder.pageUrl === "string" ? folder.pageUrl.trim() : "";
+    return normalizedId
+      ? getFolderPageUrl(normalizedId)
+      : resolveAppUrl(rawPageUrl, routes.folderDetail());
+  }
+
+  function buildCanonicalFolderPublicUrl(folder, fallbackPageUrl) {
+    const publicSlug = readRemoteFolderPublicSlug(folder);
+    if (publicSlug) {
+      return getFolderPublicUrl({
+        id: toIdString(folder.id),
+        title: folder.title,
+        publicSlug,
+      });
+    }
+
+    const rawPublicUrl = typeof folder.publicUrl === "string" ? folder.publicUrl.trim() : "";
+    return resolveAppUrl(rawPublicUrl, fallbackPageUrl, { absolute: true });
+  }
+
   function normalizeRemoteFolderSummary(folder, viewerId = currentUser.id) {
     if (!folder || typeof folder !== "object") return null;
 
@@ -528,14 +564,11 @@
 
     const access = String(folder.access ?? "private");
     const isOwner = folder.isOwner ?? access !== "shared";
-    const normalizedPageUrl = resolveAppUrl(
-      typeof folder.pageUrl === "string" ? folder.pageUrl.trim() : "",
-      routes.folderDetail({ id: normalizedId }),
-    );
-    const normalizedPublicUrl = resolveAppUrl(
-      typeof folder.publicUrl === "string" ? folder.publicUrl.trim() : "",
+    const ownerUsername = readRemoteFolderOwnerUsername(folder) || currentUser.username;
+    const normalizedPageUrl = buildCanonicalFolderPageUrl(folder, normalizedId);
+    const normalizedPublicUrl = buildCanonicalFolderPublicUrl(
+      { ...folder, id: normalizedId },
       normalizedPageUrl,
-      { absolute: true },
     );
     const ownerName =
       typeof folder.ownerName === "string" && folder.ownerName.trim()
@@ -549,11 +582,11 @@
       id: normalizedId,
       owner: folder.owner ? { ...folder.owner } : currentUser,
       ownerName,
-      ownerUsername: folder.ownerUsername ?? folder.owner?.username ?? currentUser.username,
+      ownerUsername: ownerUsername,
       ownerProfileUrl:
         resolveAppUrl(
           folder.ownerProfileUrl,
-          getProfileUrl(folder.ownerUsername ?? folder.owner?.username ?? currentUser.username),
+          getProfileUrl(ownerUsername),
         ),
       itemsCount: Number(folder.itemsCount ?? 0),
       access,
@@ -567,6 +600,59 @@
         ? formatDate(folder.updatedAt)
         : folder.updatedAtLabel ?? "",
       empty: Number(folder.itemsCount ?? 0) === 0,
+    };
+  }
+
+  function normalizeRemoteFolderItem(item, index = 0) {
+    if (!item || typeof item !== "object") return null;
+
+    const addedAt = item.addedAt ?? item.added_at ?? "";
+    let addedAtLabel = item.addedAtLabel ?? item.added_at_label ?? "";
+    if (!addedAtLabel && addedAt) {
+      try {
+        addedAtLabel = formatDate(addedAt);
+      } catch (error) {
+        addedAtLabel = "";
+      }
+    }
+
+    return {
+      ...item,
+      id: toIdString(item.id ?? item.mediaId ?? item.media_id),
+      addedAt,
+      addedAtLabel,
+      index,
+    };
+  }
+
+  function normalizeRemoteFolderDetail(folder, viewerId = currentUser.id) {
+    const summary = normalizeRemoteFolderSummary(folder, viewerId);
+    if (!summary) return null;
+
+    const role = String(folder.role ?? "").trim() || (
+      summary.isOwner
+        ? "owner"
+        : summary.isSaved
+          ? "saved"
+          : "public"
+    );
+
+    return {
+      ...folder,
+      ...summary,
+      role,
+      canEdit: role === "owner",
+      canSave: role === "public",
+      canRemoveSaved: role === "saved",
+      linkedNotice:
+        role === "saved"
+          ? "Эта папка сохранена по ссылке к оригиналу. Все обновления владельца отразятся здесь автоматически."
+          : role === "public"
+            ? "Если сохранить папку себе, она останется связанной с оригиналом и будет обновляться вместе с ним."
+            : "",
+      items: Array.isArray(folder.items)
+        ? folder.items.map((item, index) => normalizeRemoteFolderItem(item, index)).filter(Boolean)
+        : [],
     };
   }
 
@@ -1254,7 +1340,11 @@
           namespace: "folders",
           query: { ownerId, viewerId },
         });
-        return resolveRemoteCollection(data, listPublicFoldersByOwner(ownerId, viewerId));
+        const fallbackFolders = listPublicFoldersByOwner(ownerId, viewerId);
+        const remoteFolders = resolveRemoteCollection(data, fallbackFolders)
+          .map((folder) => normalizeRemoteFolderSummary(folder, viewerId))
+          .filter(Boolean);
+        return remoteFolders.length ? remoteFolders : fallbackFolders;
       },
       async () => listPublicFoldersByOwner(ownerId, viewerId),
     );
@@ -1263,19 +1353,41 @@
   function fetchProfileView({ userId = "", username = "", viewerId = currentUser.id } = {}) {
     return withBackendFallback(
       async () => {
+        const fallbackView = getProfileView({ userId, username, viewerId });
         const data = await apiClient.request("/profiles/view", { method: "GET" }, {
           namespace: "profiles",
           query: { userId, username, viewerId },
         });
-        if (data?.status) return data;
+        if (data?.status) {
+          if (data.status !== "ok") return data;
+
+          const remoteFolders = resolveRemoteCollection(
+            data.publicFolders ?? data.folders,
+            fallbackView.publicFolders,
+          )
+            .map((folder) => normalizeRemoteFolderSummary(folder, viewerId))
+            .filter(Boolean);
+
+          return {
+            ...data,
+            publicFolders: remoteFolders.length ? remoteFolders : fallbackView.publicFolders,
+          };
+        }
         if (data?.user || data?.profile || data?.id) {
+          const remoteFolders = resolveRemoteCollection(
+            data.publicFolders ?? data.folders,
+            fallbackView.publicFolders,
+          )
+            .map((folder) => normalizeRemoteFolderSummary(folder, viewerId))
+            .filter(Boolean);
+
           return {
             status: "ok",
             user: data.user ?? data.profile ?? data,
-            publicFolders: data.publicFolders ?? data.folders ?? [],
+            publicFolders: remoteFolders.length ? remoteFolders : fallbackView.publicFolders,
           };
         }
-        return getProfileView({ userId, username, viewerId });
+        return fallbackView;
       },
       async () => getProfileView({ userId, username, viewerId }),
     );
@@ -1288,11 +1400,28 @@
           namespace: "folders",
           query: { folderId, publicSlug, viewerId },
         });
-        if (data?.status) return data;
+        if (data?.status) {
+          if (data.status !== "ok") return data;
+
+          const normalizedFolder = normalizeRemoteFolderDetail(data.folder ?? data, viewerId);
+          if (!normalizedFolder) {
+            return getFolderView({ folderId, publicSlug, viewerId });
+          }
+
+          return {
+            ...data,
+            folder: normalizedFolder,
+          };
+        }
         if (data?.folder || data?.id || data?.role) {
+          const normalizedFolder = normalizeRemoteFolderDetail(data.folder ?? data, viewerId);
+          if (!normalizedFolder) {
+            return getFolderView({ folderId, publicSlug, viewerId });
+          }
+
           return {
             status: "ok",
-            folder: data.folder ?? data,
+            folder: normalizedFolder,
           };
         }
         return getFolderView({ folderId, publicSlug, viewerId });
