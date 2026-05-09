@@ -1,6 +1,7 @@
 (() => {
   const apiClient = window.MovieTrackerApiClient;
   const routes = window.MovieTrackerRoutes;
+  const resolveAppUrl = routes.resolveAppUrl;
   const STORAGE_KEY = "movieTracker.foldersState.v2";
   const CURRENT_USER_STORAGE_KEY = "movieTracker.currentUser";
   const DEFAULT_AVATAR_KEY = "violet";
@@ -493,11 +494,13 @@
 
   function getFolderPublicUrl(folder) {
     const publicSlug = folder.publicSlug || slugify(folder.title) || folder.id;
-    return new URL(routes.folderDetail({ share: publicSlug }), window.location.origin).href;
+    return resolveAppUrl(routes.folderDetail({ share: publicSlug }), routes.folderDetail({ share: publicSlug }), {
+      absolute: true,
+    });
   }
 
   function getFolderPageUrl(folderId) {
-    return routes.folderDetail({ id: folderId });
+    return resolveAppUrl(routes.folderDetail({ id: folderId }), routes.folderDetail({ id: folderId }));
   }
 
   function getProfileUrl(username, absolute = false) {
@@ -506,7 +509,7 @@
       ? routes.profile({ user: normalizedUsername })
       : routes.profile();
 
-    return absolute ? new URL(relativeUrl, window.location.href).href : relativeUrl;
+    return resolveAppUrl(relativeUrl, routes.profile(), { absolute });
   }
 
   function getCreateFolderUrl() {
@@ -525,14 +528,15 @@
 
     const access = String(folder.access ?? "private");
     const isOwner = folder.isOwner ?? access !== "shared";
-    const normalizedPageUrl =
-      typeof folder.pageUrl === "string" && folder.pageUrl.trim()
-        ? folder.pageUrl.trim()
-        : getFolderPageUrl(normalizedId);
-    const normalizedPublicUrl =
-      typeof folder.publicUrl === "string" && folder.publicUrl.trim()
-        ? folder.publicUrl.trim()
-        : new URL(normalizedPageUrl, window.location.origin).href;
+    const normalizedPageUrl = resolveAppUrl(
+      typeof folder.pageUrl === "string" ? folder.pageUrl.trim() : "",
+      routes.folderDetail({ id: normalizedId }),
+    );
+    const normalizedPublicUrl = resolveAppUrl(
+      typeof folder.publicUrl === "string" ? folder.publicUrl.trim() : "",
+      normalizedPageUrl,
+      { absolute: true },
+    );
     const ownerName =
       typeof folder.ownerName === "string" && folder.ownerName.trim()
         ? folder.ownerName.trim()
@@ -547,8 +551,10 @@
       ownerName,
       ownerUsername: folder.ownerUsername ?? folder.owner?.username ?? currentUser.username,
       ownerProfileUrl:
-        folder.ownerProfileUrl
-        ?? getProfileUrl(folder.ownerUsername ?? folder.owner?.username ?? currentUser.username),
+        resolveAppUrl(
+          folder.ownerProfileUrl,
+          getProfileUrl(folder.ownerUsername ?? folder.owner?.username ?? currentUser.username),
+        ),
       itemsCount: Number(folder.itemsCount ?? 0),
       access,
       isOwner,

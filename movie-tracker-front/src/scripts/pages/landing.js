@@ -356,10 +356,11 @@ function normalizeAuthUser(responseData, fallbackIdentifier) {
     extensionCode: source.extensionCode ?? source.extension_code ?? "MT-USER-2026",
     avatarKey: source.avatarKey ?? source.avatar_key ?? DEFAULT_AVATAR_KEY,
     avatarImage: source.avatarImage ?? source.avatar_image ?? source.avatarUrl ?? "",
-    profileUrl:
-      source.profileUrl ??
-      source.profile_url ??
-      new URL(routes.profile({ user: login }), window.location.origin).href,
+    profileUrl: routes.resolveAppUrl(
+      source.profileUrl ?? source.profile_url,
+      routes.profile({ user: login }),
+      { absolute: true },
+    ),
   };
 }
 
