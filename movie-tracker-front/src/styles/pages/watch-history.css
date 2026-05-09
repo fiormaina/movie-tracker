@@ -461,12 +461,38 @@ a {
   margin-top: 34px;
 }
 
+.history-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
 .history-section__label {
-  margin: 0 0 14px;
+  margin: 0;
   font-size: 0.95rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--text-muted);
+}
+
+.history-section__more {
+  border: 0;
+  background: transparent;
+  color: var(--accent-strong);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 0;
+  transition: color 160ms ease, transform 160ms ease;
+}
+
+.history-section__more:hover,
+.history-section__more:focus-visible {
+  color: var(--accent);
+  transform: translateY(-1px);
 }
 
 .history-grid {

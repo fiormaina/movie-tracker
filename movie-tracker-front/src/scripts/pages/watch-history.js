@@ -21,6 +21,17 @@ const watchHistoryApi = window.MovieTrackerMediaApi;
 const routes = window.MovieTrackerRoutes;
 const OPEN_CREATE_MODAL_KEY = "movieTracker.openCreateFolderModal";
 const PENDING_CREATE_SOURCE_KEY = "movieTracker.pendingCreateFolderSource";
+const SECTION_ITEM_LIMIT = 8;
+const SYSTEM_FOLDER_DEFINITIONS = Object.freeze({
+  watching: {
+    systemKeys: ["continue-watching", "continue_watching", "watching", "in-progress"],
+    titles: ["Продолжить просмотр"],
+  },
+  completed: {
+    systemKeys: ["completed", "viewed", "watched", "recently-viewed", "recently_viewed"],
+    titles: ["Просмотрено", "Недавно просмотрено"],
+  },
+});
 
 const manualStatuses = [
   { value: "planned", label: "Планирую смотреть" },
@@ -221,6 +232,8 @@ const initialState = {
     itemId: null,
     selectedFolderId: "",
     loading: false,
+    optionsLoading: false,
+    options: [],
   },
   manualOverlay: {
     isOpen: false,
@@ -243,7 +256,10 @@ function structuredCloneWithSet(value) {
     tabs: value.tabs.map((tab) => ({ ...tab })),
     filters: value.filters.map((filter) => ({ ...filter })),
     ratingOverlay: { ...value.ratingOverlay },
-    folderOverlay: { ...value.folderOverlay },
+    folderOverlay: {
+      ...value.folderOverlay,
+      options: value.folderOverlay.options.map((folder) => ({ ...folder })),
+    },
     manualOverlay: {
       ...value.manualOverlay,
       form: { ...value.manualOverlay.form },
@@ -340,9 +356,29 @@ function getSections(items) {
     .sort((a, b) => new Date(b.watchedAt ?? b.updatedAt) - new Date(a.watchedAt ?? a.updatedAt));
 
   return [
-    { title: "Продолжить просмотр", items: watchingItems },
-    { title: "Недавно просмотрено", items: completedItems },
+    { title: "Продолжить просмотр", items: watchingItems, folderKind: "watching" },
+    { title: "Недавно просмотрено", items: completedItems, folderKind: "completed" },
   ];
+}
+
+function normalizeFolderLookupValue(value) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, "-");
+}
+
+function matchesSystemFolder(folder, kind) {
+  const definition = SYSTEM_FOLDER_DEFINITIONS[kind];
+  if (!definition || !folder) return false;
+
+  const normalizedSystemKey = normalizeFolderLookupValue(folder.systemKey ?? folder.system_key);
+  const normalizedTitle = String(folder.title ?? "").trim().toLowerCase();
+
+  return (
+    (normalizedSystemKey && definition.systemKeys.includes(normalizedSystemKey)) ||
+    definition.titles.some((title) => normalizedTitle === title.toLowerCase())
+  );
 }
 
 function getItemType(item) {
@@ -475,14 +511,24 @@ function renderCard(item) {
 function renderSections(sections) {
   return sections
     .map(
-      (section) => `
+      (section) => {
+        const visibleItems = section.items.slice(0, SECTION_ITEM_LIMIT);
+        const showMoreButton = section.items.length > SECTION_ITEM_LIMIT;
+
+        return `
         <section class="history-section">
-          <h2 class="history-section__label">${section.title}</h2>
+          <div class="history-section__head">
+            <h2 class="history-section__label">${section.title}</h2>
+            ${showMoreButton
+              ? `<button class="history-section__more" type="button" data-action="open-system-folder" data-folder-kind="${section.folderKind}">Посмотреть еще</button>`
+              : ""}
+          </div>
           <div class="history-grid">
-            ${section.items.map(renderCard).join("")}
+            ${visibleItems.map(renderCard).join("")}
           </div>
         </section>
-      `,
+      `;
+      },
     )
     .join("");
 }
@@ -572,7 +618,20 @@ function renderRatingOverlay(overlay) {
 function renderFolderOverlay(overlay) {
   if (!overlay.isOpen) return "";
 
-  const folderOptions = listFolderOptions();
+  const folderOptions = overlay.options;
+
+  if (overlay.optionsLoading && !folderOptions.length) {
+    return renderModalShell(
+      "Добавить в папку",
+      `
+        <div class="folder-placeholder">
+          <p class="folder-placeholder__hint">Загружаем ваши папки...</p>
+        </div>
+      `,
+      "",
+      "folder",
+    );
+  }
 
   if (!folderOptions.length) {
     return renderModalShell(
@@ -973,23 +1032,44 @@ async function ensureFolderOptionsLoaded() {
     console.error(error);
   }
 
-  return listFolderOptions();
+  return listFolderOptions().map((folder) => ({ ...folder }));
 }
 
 async function openFolderOverlay(id) {
   const item = getItemById(id);
   if (!item) return;
-  const folderOptions = await ensureFolderOptionsLoaded();
+  const initialOptions = listFolderOptions().map((folder) => ({ ...folder }));
 
   setState((currentState) => ({
     ...currentState,
     folderOverlay: {
       isOpen: true,
       itemId: id,
-      selectedFolderId: item.folderId || folderOptions[0]?.id || "",
+      selectedFolderId: item.folderId || initialOptions[0]?.id || "",
       loading: false,
+      optionsLoading: true,
+      options: initialOptions,
     },
   }));
+
+  const folderOptions = await ensureFolderOptionsLoaded();
+  const fallbackSelectedFolderId = item.folderId || folderOptions[0]?.id || "";
+
+  setState((currentState) => {
+    if (!currentState.folderOverlay.isOpen || currentState.folderOverlay.itemId !== id) {
+      return currentState;
+    }
+
+    return {
+      ...currentState,
+      folderOverlay: {
+        ...currentState.folderOverlay,
+        selectedFolderId: currentState.folderOverlay.selectedFolderId || fallbackSelectedFolderId,
+        optionsLoading: false,
+        options: folderOptions,
+      },
+    };
+  });
 }
 
 function closeFolderOverlay() {
@@ -1024,7 +1104,7 @@ function updateFolderSelectionDom(selectedFolderId) {
 
 async function confirmFolder() {
   const { itemId, selectedFolderId } = state.folderOverlay;
-  if (!itemId || !selectedFolderId || state.folderOverlay.loading) return;
+  if (!itemId || !selectedFolderId || state.folderOverlay.loading || state.folderOverlay.optionsLoading) return;
 
   setState((currentState) => ({
     ...currentState,
@@ -1049,6 +1129,25 @@ async function confirmFolder() {
       folderOverlay: { ...currentState.folderOverlay, loading: false },
     }));
     showToast(error.code === "access" ? "Ошибка доступа" : "Не удалось обновить данные", "error");
+  }
+}
+
+async function openSystemFolder(kind) {
+  try {
+    const folders = await fetchOwnFolders();
+    const folder = Array.isArray(folders)
+      ? folders.find((item) => matchesSystemFolder(item, kind))
+      : null;
+
+    if (!folder?.pageUrl) {
+      showToast("Системная папка пока недоступна", "error");
+      return;
+    }
+
+    navigateToPage(folder.pageUrl);
+  } catch (error) {
+    console.error(error);
+    showToast("Не удалось открыть папку", "error");
   }
 }
 
@@ -1302,6 +1401,11 @@ function handleRootClick(event) {
 
     if (action === "create-folder-from-overlay") {
       openCreateFolderModal();
+      return;
+    }
+
+    if (action === "open-system-folder") {
+      openSystemFolder(actionButton.dataset.folderKind);
       return;
     }
   }

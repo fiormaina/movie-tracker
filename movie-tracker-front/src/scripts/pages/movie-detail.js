@@ -172,6 +172,8 @@ const initialState = {
     isOpen: false,
     selectedFolderId: "",
     loading: false,
+    optionsLoading: false,
+    options: [],
   },
   toasts: [],
 };
@@ -186,7 +188,10 @@ function cloneState(value) {
     movie: { ...value.movie, genres: normalizeGenres(value.movie.genres) },
     tabs: value.tabs.map((tab) => ({ ...tab })),
     ratingOverlay: { ...value.ratingOverlay },
-    folderOverlay: { ...value.folderOverlay },
+    folderOverlay: {
+      ...value.folderOverlay,
+      options: value.folderOverlay.options.map((folder) => ({ ...folder })),
+    },
     toasts: [...value.toasts],
   };
 }
@@ -404,7 +409,20 @@ function renderRatingOverlay(overlay) {
 function renderFolderOverlay(overlay) {
   if (!overlay.isOpen) return "";
 
-  const folderOptions = listFolderOptions();
+  const folderOptions = overlay.options;
+
+  if (overlay.optionsLoading && !folderOptions.length) {
+    return renderModalShell(
+      "Добавить в папку",
+      `
+        <div class="folder-placeholder">
+          <p class="folder-placeholder__hint">Загружаем ваши папки...</p>
+        </div>
+      `,
+      "",
+      "folder",
+    );
+  }
 
   if (!folderOptions.length) {
     return renderModalShell(
@@ -570,20 +588,41 @@ async function ensureFolderOptionsLoaded() {
     console.error(error);
   }
 
-  return listFolderOptions();
+  return listFolderOptions().map((folder) => ({ ...folder }));
 }
 
 async function openFolderOverlay() {
-  const folderOptions = await ensureFolderOptionsLoaded();
+  const initialOptions = listFolderOptions().map((folder) => ({ ...folder }));
 
   setState((currentState) => ({
     ...currentState,
     folderOverlay: {
       isOpen: true,
-      selectedFolderId: currentState.movie.folderId || folderOptions[0]?.id || "",
+      selectedFolderId: currentState.movie.folderId || initialOptions[0]?.id || "",
       loading: false,
+      optionsLoading: true,
+      options: initialOptions,
     },
   }));
+
+  const folderOptions = await ensureFolderOptionsLoaded();
+
+  setState((currentState) => {
+    if (!currentState.folderOverlay.isOpen) {
+      return currentState;
+    }
+
+    return {
+      ...currentState,
+      folderOverlay: {
+        ...currentState.folderOverlay,
+        selectedFolderId: currentState.folderOverlay.selectedFolderId || currentState.movie.folderId || folderOptions[0]?.id || "",
+        loading: false,
+        optionsLoading: false,
+        options: folderOptions,
+      },
+    };
+  });
 }
 
 function closeFolderOverlay() {
@@ -614,7 +653,7 @@ function updateFolderSelectionDom(selectedFolderId) {
 }
 
 async function confirmFolder() {
-  if (state.folderOverlay.loading || !state.folderOverlay.selectedFolderId) return;
+  if (state.folderOverlay.loading || state.folderOverlay.optionsLoading || !state.folderOverlay.selectedFolderId) return;
 
   const { selectedFolderId } = state.folderOverlay;
 

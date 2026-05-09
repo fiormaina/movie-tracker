@@ -60,6 +60,22 @@
   let searchRequestToken = 0;
   const showToast = createToastController(setState);
 
+  const PROTECTED_FOLDER_SYSTEM_KEYS = new Set([
+    "continue-watching",
+    "continue_watching",
+    "watching",
+    "in-progress",
+    "completed",
+    "viewed",
+    "watched",
+    "recently-viewed",
+    "recently_viewed",
+  ]);
+  const PROTECTED_FOLDER_TITLES = new Set([
+    "продолжить просмотр",
+    "просмотрено",
+  ]);
+
   function normalizeMetaText(value) {
     return String(value ?? "")
       .split("·")
@@ -83,6 +99,22 @@
     return hasDisplayValue(value)
       ? `<span class="folder-detail__item-badge">${escapeHtml(String(value).trim())}</span>`
       : "";
+  }
+
+  function isProtectedSystemFolder(folder) {
+    if (!folder) return false;
+
+    const normalizedSystemKey = String(folder.systemKey ?? folder.system_key ?? "")
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_]+/g, "-");
+    const normalizedTitle = String(folder.title ?? "").trim().toLowerCase();
+
+    return PROTECTED_FOLDER_SYSTEM_KEYS.has(normalizedSystemKey) || PROTECTED_FOLDER_TITLES.has(normalizedTitle);
+  }
+
+  function canRemoveFolderItem(folder) {
+    return folder?.role === "owner" && !isProtectedSystemFolder(folder);
   }
 
   function cloneState(value) {
@@ -385,7 +417,7 @@
   }
 
   function renderItem(item, folder) {
-    const ownerControls = folder.role === "owner"
+    const ownerControls = canRemoveFolderItem(folder)
       ? `
         <div class="folder-detail__item-actions">
           <button class="folder-detail__icon-button folder-detail__icon-button--danger" type="button" data-action="remove-item" data-id="${item.id}" ${state.pendingAction ? "disabled" : ""} aria-label="Удалить из папки">
@@ -971,7 +1003,7 @@
   }
 
   async function handleRemoveItem(mediaId) {
-    if (!state.folder || state.folder.role !== "owner" || state.pendingAction) return;
+    if (!state.folder || !canRemoveFolderItem(state.folder) || state.pendingAction) return;
 
     setState((currentState) => ({
       ...currentState,
