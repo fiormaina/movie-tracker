@@ -218,7 +218,7 @@
   async function loadPageScripts(nextDocument, targetUrl) {
     const scripts = [...nextDocument.querySelectorAll("script[src]")]
       .map((script) => script.getAttribute("src"))
-      .filter((src) => src && !src.includes("common-ui.js"));
+      .filter((src) => src && !src.includes("common-ui.js") && !src.includes("app-runtime.js"));
 
     for (const src of scripts) {
       await runPageScript(new URL(src, targetUrl).href);

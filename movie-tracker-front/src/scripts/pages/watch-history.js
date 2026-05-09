@@ -321,14 +321,25 @@ function openMovieDetail(id) {
   navigateToPage(getMovieDetailUrl(id));
 }
 
-function openContinueTarget(id) {
-  const item = getItemById(id);
-  if (!item) return;
+function patchItemWithMovieDetail(id, detail) {
+  if (!detail || typeof detail !== "object") return null;
 
-  const continueTarget = openContinueUrl(item);
-  if (continueTarget.ok) return;
+  const currentItem = getItemById(id);
+  if (!currentItem) return null;
 
-  showToast(continueTarget.message, "error");
+  const nextItem = normalizeHistoryItem({
+    ...currentItem,
+    ...detail,
+  });
+
+  setState((currentState) => ({
+    ...currentState,
+    items: currentState.items.map((item) =>
+      String(item.id) === String(id) ? nextItem : item,
+    ),
+  }));
+
+  return nextItem;
 }
 
 function updateItemInState(id, patch) {
@@ -471,11 +482,13 @@ function renderCard(item) {
   const shouldShowContinue = item.status !== "completed";
   const metaText = normalizeMeta(item.meta);
   const continueTarget = resolveContinueUrl(item);
+  const continuePendingKey = `${item.id}:continue`;
+  const isContinueLoading = state.pendingActions.has(continuePendingKey);
   const continueMarkup = !shouldShowContinue
     ? ""
     : continueTarget.ok
       ? `<a class="watch-card__continue" href="${escapeHtml(continueTarget.href)}" target="_blank" rel="noopener noreferrer">▶ Продолжить просмотр</a>`
-      : `<button class="watch-card__continue" type="button" data-action="open-detail" data-id="${item.id}">▶ Продолжить просмотр</button>`;
+      : `<button class="watch-card__continue" type="button" data-action="continue" data-id="${item.id}" ${isContinueLoading ? "disabled" : ""}>▶ ${isContinueLoading ? "Открываем..." : "Продолжить просмотр"}</button>`;
 
   return `
     <article
@@ -886,41 +899,54 @@ function renderApp() {
   rootElement.innerHTML = renderPage();
 }
 
-async function hydrateContinueUrls(items) {
-  const hydratedItems = await Promise.all(
-    items.map(async (item) => {
-      if (item.status === "completed" || resolveContinueUrl(item).ok) {
-        return item;
-      }
-
-      const detail = await watchHistoryApi.getMovieDetail(item.id, item);
-      if (!detail || typeof detail !== "object") {
-        return item;
-      }
-
-      return normalizeHistoryItem({
-        ...item,
-        ...detail,
-      });
-    }),
-  );
-
-  return hydratedItems;
-}
-
 async function hydrateWatchHistory() {
   try {
     const items = await watchHistoryApi.listWatchHistory(state.items);
     if (!Array.isArray(items)) return;
     const normalizedItems = items.map((item) => normalizeHistoryItem(item));
-    const hydratedItems = await hydrateContinueUrls(normalizedItems);
 
     setState((currentState) => ({
       ...currentState,
-      items: hydratedItems,
+      items: normalizedItems,
     }));
   } catch (error) {
     console.error(error);
+  }
+}
+
+async function continueWatching(id) {
+  const item = getItemById(id);
+  if (!item) return;
+
+  const continueTarget = resolveContinueUrl(item);
+  if (continueTarget.ok) {
+    openContinueUrl(item);
+    return;
+  }
+
+  const pendingKey = `${id}:continue`;
+  if (state.pendingActions.has(pendingKey)) return;
+
+  addPendingAction(pendingKey);
+  renderApp();
+
+  try {
+    const detail = await watchHistoryApi.getMovieDetail(id, item);
+    const nextItem = patchItemWithMovieDetail(id, detail) ?? getItemById(id) ?? item;
+    const nextTarget = resolveContinueUrl(nextItem);
+
+    if (nextTarget.ok) {
+      openContinueUrl(nextItem);
+      return;
+    }
+
+    navigateToPage(getMovieDetailUrl(id));
+  } catch (error) {
+    console.error(error);
+    navigateToPage(getMovieDetailUrl(id));
+  } finally {
+    removePendingAction(pendingKey);
+    renderApp();
   }
 }
 
@@ -1380,8 +1406,8 @@ function handleRootClick(event) {
       return;
     }
 
-    if (action === "open-detail") {
-      openContinueTarget(id);
+    if (action === "continue") {
+      continueWatching(id);
       return;
     }
 
