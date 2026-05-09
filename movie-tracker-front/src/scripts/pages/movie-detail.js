@@ -5,7 +5,7 @@ const {
   renderModalShell,
   renderToasts,
 } = window.MovieTrackerUI;
-const { createToastController } = window.MovieTrackerHelpers;
+const { createToastController, openContinueUrl } = window.MovieTrackerHelpers;
 const {
   createPrimaryTabs,
   renderAppHeader,
@@ -629,6 +629,13 @@ async function markWatched() {
   }
 }
 
+function continueWatching() {
+  const continueTarget = openContinueUrl(state.movie);
+  if (!continueTarget.ok) {
+    showToast(continueTarget.message, "error");
+  }
+}
+
 function autoSizeActiveTextarea() {
   const textarea = rootElement?.querySelector("[data-rating-comment]");
   if (textarea) autoSizeTextarea(textarea);
@@ -658,7 +665,7 @@ function handleRootClick(event) {
     const action = actionButton.dataset.action;
 
     if (action === "continue") {
-      showToast("Продолжаем просмотр", "success");
+      continueWatching();
       return;
     }
 

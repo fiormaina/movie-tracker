@@ -6,7 +6,7 @@ const {
   renderModalShell,
   renderToasts,
 } = window.MovieTrackerUI;
-const { createToastController } = window.MovieTrackerHelpers;
+const { createToastController, openContinueUrl } = window.MovieTrackerHelpers;
 const { createPrimaryTabs, renderAppFooter, renderAppHeader } = window.MovieTrackerAppShell;
 const {
   addItemToFolder,
@@ -356,13 +356,11 @@ function openContinueTarget(id) {
   const item = getItemById(id);
   if (!item) return;
 
-  const continueTarget = resolveContinueUrl(item);
+  const continueTarget = openContinueUrl(item);
   if (!continueTarget.ok) {
     showToast(continueTarget.message, "error");
     return;
   }
-
-  window.location.href = continueTarget.href;
 }
 
 function updateItemInState(id, patch) {
