@@ -15,7 +15,7 @@ const API_BASE_URL_STORAGE_KEY = "movieTracker.apiBaseUrl";
 const ACCESS_TOKEN_STORAGE_KEY = "movieTracker.accessToken";
 const APP_STATE_TRANSFER_HASH_KEY = "movieTrackerState";
 const DEFAULT_LOCAL_API_BASE_URL = "http://127.0.0.1:8000";
-const DEFAULT_APP_BASE_URL = "https://fiormaina.github.io/movie-tracker/movie-tracker-front/";
+const DEFAULT_APP_BASE_URL = "https://fiormaina.github.io/movie-tracker/";
 const DEFAULT_DISPLAY_NAME = "Пользователь";
 const AUTH_TEMPORARY_ERROR_MESSAGE = "произошла ошибка, скоро все заработает";
 

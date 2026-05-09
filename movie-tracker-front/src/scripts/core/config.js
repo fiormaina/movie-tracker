@@ -4,7 +4,7 @@
   const CURRENT_USER_STORAGE_KEY = "movieTracker.currentUser";
   const APP_STATE_TRANSFER_HASH_KEY = "movieTrackerState";
   const LOCAL_API_BASE_URL = "http://127.0.0.1:8000";
-  const DEFAULT_APP_BASE_URL = "https://fiormaina.github.io/movie-tracker/movie-tracker-front/";
+  const DEFAULT_APP_BASE_URL = "https://fiormaina.github.io/movie-tracker/";
   const currentUrl = new URL(window.location.href);
   const currentPath = window.location.pathname;
   const pagesMarker = "/pages/";
