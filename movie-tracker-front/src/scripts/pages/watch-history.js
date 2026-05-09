@@ -6,7 +6,7 @@ const {
   renderModalShell,
   renderToasts,
 } = window.MovieTrackerUI;
-const { createToastController, openContinueUrl } = window.MovieTrackerHelpers;
+const { createToastController, openContinueUrl, resolveContinueUrl } = window.MovieTrackerHelpers;
 const { createPrimaryTabs, renderAppFooter, renderAppHeader } = window.MovieTrackerAppShell;
 const {
   addItemToFolder,
@@ -478,6 +478,12 @@ function renderCard(item) {
   const shouldShowBadge = item.status !== "completed" && item.badge;
   const shouldShowContinue = item.status !== "completed";
   const metaText = normalizeMeta(item.meta);
+  const continueTarget = resolveContinueUrl(item);
+  const continueMarkup = !shouldShowContinue
+    ? ""
+    : continueTarget.ok
+      ? `<a class="watch-card__continue" href="${escapeHtml(continueTarget.href)}" target="_blank" rel="noopener noreferrer">▶ Продолжить просмотр</a>`
+      : `<button class="watch-card__continue" type="button" data-action="open-detail" data-id="${item.id}">▶ Продолжить просмотр</button>`;
 
   return `
     <article
@@ -503,11 +509,7 @@ function renderCard(item) {
         ${metaText ? `<p class="watch-card__meta">${metaText}</p>` : ""}
         <div class="watch-card__footer">
           ${renderRating(item.rating)}
-          ${
-            shouldShowContinue
-              ? `<button class="watch-card__continue" type="button" data-action="open-detail" data-id="${item.id}">▶ Продолжить просмотр</button>`
-              : ``
-          }
+          ${continueMarkup}
         </div>
       </div>
     </article>
