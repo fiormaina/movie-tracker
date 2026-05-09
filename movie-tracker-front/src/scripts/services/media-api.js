@@ -49,11 +49,18 @@
   function cloneMovie(movie) {
     if (!movie || typeof movie !== "object") return movie;
 
+    const normalizedUserRating = normalizeRatingValue(movie.userRating ?? movie.rating);
+
     return {
       ...movie,
+      id: movie.id === null || movie.id === undefined ? movie.id : String(movie.id),
+      folderId:
+        movie.folderId === null || movie.folderId === undefined
+          ? null
+          : String(movie.folderId),
       genres: normalizeGenres(movie.genres),
       imdbRating: normalizeRatingValue(movie.imdbRating),
-      userRating: normalizeRatingValue(movie.userRating),
+      userRating: normalizedUserRating,
     };
   }
 

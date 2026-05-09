@@ -14,6 +14,7 @@ const {
 } = window.MovieTrackerAppShell;
 const {
   addItemToFolder,
+  fetchOwnFolders,
   listFolderOptions,
 } = window.MovieTrackerFolders;
 const movieDetailApi = window.MovieTrackerMediaApi;
@@ -211,6 +212,28 @@ function setState(updater, options = {}) {
   }
 }
 
+function renderCommentSection(movie) {
+  const commentText = String(movie.comment ?? "").trim();
+
+  if (!commentText) {
+    return `
+      <section class="movie-detail__comments" aria-label="Комментарии">
+        <h2 class="movie-detail__comments-title">Комментарии</h2>
+        <p class="movie-detail__comments-empty">Комментариев пока нет</p>
+      </section>
+    `;
+  }
+
+  const commentMarkup = escapeHtml(commentText).replaceAll("\n", "<br />");
+
+  return `
+    <section class="movie-detail__comments" aria-label="Комментарии">
+      <h2 class="movie-detail__comments-title">Комментарии</h2>
+      <p class="movie-detail__description">${commentMarkup}</p>
+    </section>
+  `;
+}
+
 function renderMovieDetail(movie) {
   const genres = normalizeGenres(movie.genres);
   const facts = [movie.type, movie.year, movie.duration].filter(hasDisplayValue);
@@ -321,10 +344,7 @@ function renderMovieDetail(movie) {
 
         ${ratingMarkup}
 
-        <section class="movie-detail__comments" aria-label="Комментарии">
-          <h2 class="movie-detail__comments-title">Комментарии</h2>
-          <p class="movie-detail__comments-empty">Комментариев пока нет</p>
-        </section>
+        ${renderCommentSection(movie)}
       </article>
     </section>
   `;
@@ -543,8 +563,18 @@ async function confirmRating() {
   }
 }
 
-function openFolderOverlay() {
-  const folderOptions = listFolderOptions();
+async function ensureFolderOptionsLoaded() {
+  try {
+    await fetchOwnFolders();
+  } catch (error) {
+    console.error(error);
+  }
+
+  return listFolderOptions();
+}
+
+async function openFolderOverlay() {
+  const folderOptions = await ensureFolderOptionsLoaded();
 
   setState((currentState) => ({
     ...currentState,

@@ -76,6 +76,8 @@
     return apiClient.withLocalFallback(remoteWork, fallbackWork);
   }
 
+  let remoteFolderOptions = [];
+
   const defaultUsers = Object.freeze({
     [currentUser.id]: currentUser,
     "anna-2026": {
@@ -509,6 +511,73 @@
 
   function getCreateFolderUrl() {
     return routes.folderCreate;
+  }
+
+  function toIdString(value) {
+    return value === null || value === undefined ? "" : String(value);
+  }
+
+  function normalizeRemoteFolderSummary(folder, viewerId = currentUser.id) {
+    if (!folder || typeof folder !== "object") return null;
+
+    const normalizedId = toIdString(folder.id);
+    if (!normalizedId) return null;
+
+    const access = String(folder.access ?? "private");
+    const isOwner = folder.isOwner ?? access !== "shared";
+    const normalizedPageUrl =
+      typeof folder.pageUrl === "string" && folder.pageUrl.trim()
+        ? folder.pageUrl.trim()
+        : getFolderPageUrl(normalizedId);
+    const normalizedPublicUrl =
+      typeof folder.publicUrl === "string" && folder.publicUrl.trim()
+        ? folder.publicUrl.trim()
+        : new URL(normalizedPageUrl, window.location.origin).href;
+    const ownerName =
+      typeof folder.ownerName === "string" && folder.ownerName.trim()
+        ? folder.ownerName.trim()
+        : isOwner
+          ? currentUser.displayName
+          : "";
+
+    return {
+      ...folder,
+      id: normalizedId,
+      owner: folder.owner ? { ...folder.owner } : currentUser,
+      ownerName,
+      ownerUsername: folder.ownerUsername ?? folder.owner?.username ?? currentUser.username,
+      ownerProfileUrl:
+        folder.ownerProfileUrl
+        ?? getProfileUrl(folder.ownerUsername ?? folder.owner?.username ?? currentUser.username),
+      itemsCount: Number(folder.itemsCount ?? 0),
+      access,
+      isOwner,
+      isSaved: folder.isSaved ?? access === "shared",
+      isPublic: Boolean(folder.isPublic ?? folder.publicSlug ?? access === "shared"),
+      isAccessible: folder.isAccessible ?? true,
+      publicUrl: normalizedPublicUrl,
+      pageUrl: normalizedPageUrl,
+      updatedAtLabel: folder.updatedAt
+        ? formatDate(folder.updatedAt)
+        : folder.updatedAtLabel ?? "",
+      empty: Number(folder.itemsCount ?? 0) === 0,
+    };
+  }
+
+  function rememberRemoteFolderOptions(folders = []) {
+    remoteFolderOptions = folders
+      .filter((folder) => folder && !folder.isSystem && folder.isOwner)
+      .map((folder) => ({
+        id: folder.id,
+        title: folder.title,
+        description:
+          folder.description ||
+          (folder.isPublic
+            ? "Публичная папка с общей ссылкой"
+            : "Личная папка для собственных подборок"),
+        isPublic: folder.isPublic,
+        itemsCount: folder.itemsCount,
+      }));
   }
 
   function enrichFolderSummary(folder, state, viewerId = currentUser.id) {
@@ -1029,6 +1098,10 @@
   }
 
   function listFolderOptions(viewerId = currentUser.id) {
+    if (remoteFolderOptions.length) {
+      return remoteFolderOptions.map((folder) => ({ ...folder }));
+    }
+
     return listOwnFolders(viewerId).map((folder) => ({
       id: folder.id,
       title: folder.title,
@@ -1123,9 +1196,22 @@
           namespace: "folders",
           query: { viewerId },
         });
-        return resolveRemoteCollection(data, listLibraryFolders(viewerId));
+        const fallbackFolders = listLibraryFolders(viewerId);
+        const remoteFolders = resolveRemoteCollection(data, fallbackFolders)
+          .map((folder) => normalizeRemoteFolderSummary(folder, viewerId))
+          .filter(Boolean);
+        if (remoteFolders.length) {
+          rememberRemoteFolderOptions(remoteFolders);
+          return remoteFolders;
+        }
+
+        return fallbackFolders;
       },
-      async () => listLibraryFolders(viewerId),
+      async () => {
+        const fallbackFolders = listLibraryFolders(viewerId);
+        rememberRemoteFolderOptions(fallbackFolders);
+        return fallbackFolders;
+      },
     );
   }
 
@@ -1136,9 +1222,22 @@
           namespace: "folders",
           query: { viewerId },
         });
-        return resolveRemoteCollection(data, listOwnFolders(viewerId));
+        const fallbackFolders = listOwnFolders(viewerId);
+        const remoteFolders = resolveRemoteCollection(data, fallbackFolders)
+          .map((folder) => normalizeRemoteFolderSummary(folder, viewerId))
+          .filter(Boolean);
+        if (remoteFolders.length) {
+          rememberRemoteFolderOptions(remoteFolders);
+          return remoteFolders;
+        }
+
+        return fallbackFolders;
       },
-      async () => listOwnFolders(viewerId),
+      async () => {
+        const fallbackFolders = listOwnFolders(viewerId);
+        rememberRemoteFolderOptions(fallbackFolders);
+        return fallbackFolders;
+      },
     );
   }
 

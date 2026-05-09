@@ -81,7 +81,8 @@
   }
 
   function getFolderById(id) {
-    return state.folders.find((folder) => folder.id === id);
+    const normalizedId = String(id ?? "");
+    return state.folders.find((folder) => String(folder.id) === normalizedId);
   }
 
   async function loadFolders() {
@@ -425,7 +426,14 @@
     if (!folder) return;
 
     try {
-      await writeClipboardText(folder.publicUrl);
+      const folderLink = folder.publicUrl
+        || (folder.pageUrl ? new URL(folder.pageUrl, window.location.origin).href : "");
+      if (!folderLink) {
+        showToast("Ссылка для папки недоступна", "error");
+        return;
+      }
+
+      await writeClipboardText(folderLink);
       showToast("Ссылка скопирована", "success");
     } catch (error) {
       console.error(error);
@@ -434,7 +442,8 @@
   }
 
   function openDeleteOverlay(id) {
-    if (!getFolderById(id)) return;
+    const folder = getFolderById(id);
+    if (!folder || (folder.isOwner && folder.canDelete === false)) return;
 
     setState((currentState) => ({
       ...currentState,
@@ -549,7 +558,7 @@
     if (!folderId) return;
 
     const folder = getFolderById(folderId);
-    if (!folder) return;
+    if (!folder || (folder.isOwner && folder.canDelete === false)) return;
 
     try {
       if (folder.isOwner) {

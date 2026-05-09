@@ -6,10 +6,15 @@ const {
   renderModalShell,
   renderToasts,
 } = window.MovieTrackerUI;
-const { createToastController, resolveContinueUrl } = window.MovieTrackerHelpers;
+const {
+  createToastController,
+  openContinueUrl,
+  resolveContinueUrl,
+} = window.MovieTrackerHelpers;
 const { createPrimaryTabs, renderAppFooter, renderAppHeader } = window.MovieTrackerAppShell;
 const {
   addItemToFolder,
+  fetchOwnFolders,
   listFolderOptions,
 } = window.MovieTrackerFolders;
 const watchHistoryApi = window.MovieTrackerMediaApi;
@@ -259,7 +264,8 @@ function setState(updater, options = {}) {
 }
 
 function getItemById(id) {
-  return state.items.find((item) => item.id === id);
+  const normalizedId = String(id ?? "");
+  return state.items.find((item) => String(item.id) === normalizedId);
 }
 
 function getMovieDetailUrl(id) {
@@ -281,71 +287,18 @@ function normalizeMeta(value) {
 }
 
 function normalizeHistoryItem(item = {}) {
-  const numericRating = Number(item.rating);
+  const numericRating = Number(item.userRating ?? item.rating);
 
   return {
     ...item,
+    id: String(item.id ?? ""),
+    folderId:
+      item.folderId === null || item.folderId === undefined
+        ? null
+        : String(item.folderId),
     meta: normalizeMeta(item.meta),
     rating: Number.isFinite(numericRating) && numericRating > 0 ? numericRating : null,
   };
-}
-
-function getContinueUrl(item) {
-  if (!item || typeof item !== "object") return "";
-
-  const candidateKeys = [
-    "continueUrl",
-    "continue_url",
-    "watchUrl",
-    "watch_url",
-    "sourceUrl",
-    "source_url",
-    "pageUrl",
-    "page_url",
-    "url",
-  ];
-
-  for (const key of candidateKeys) {
-    const value = item[key];
-    if (typeof value === "string" && value.trim()) {
-      return value.trim();
-    }
-  }
-
-  return "";
-}
-
-function resolveContinueUrl(item) {
-  const continueUrl = getContinueUrl(item);
-  if (!continueUrl) {
-    return {
-      ok: false,
-      reason: "missing",
-      message: "Ссылка на просмотр недоступна. Обновите запись или запустите просмотр снова.",
-    };
-  }
-
-  try {
-    const resolvedUrl = new URL(continueUrl, window.location.href);
-    if (!["http:", "https:"].includes(resolvedUrl.protocol)) {
-      return {
-        ok: false,
-        reason: "invalid",
-        message: "Не удалось открыть ссылку на просмотр. Проверьте запись и попробуйте снова.",
-      };
-    }
-
-    return {
-      ok: true,
-      href: resolvedUrl.href,
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      reason: "invalid",
-      message: "Не удалось открыть ссылку на просмотр. Проверьте запись и попробуйте снова.",
-    };
-  }
 }
 
 function openMovieDetail(id) {
@@ -356,16 +309,19 @@ function openContinueTarget(id) {
   const item = getItemById(id);
   if (!item) return;
 
-  const continueTarget = resolveContinueUrl(item);
-  if (!continueTarget.ok) {
-    showToast(continueTarget.message, "error");
-  }
+  const continueTarget = openContinueUrl(item);
+  if (continueTarget.ok) return;
+
+  showToast(continueTarget.message, "error");
 }
 
 function updateItemInState(id, patch) {
+  const normalizedId = String(id ?? "");
   return {
     ...state,
-    items: state.items.map((item) => (item.id === id ? { ...item, ...patch } : item)),
+    items: state.items.map((item) =>
+      String(item.id) === normalizedId ? { ...item, ...patch } : item,
+    ),
   };
 }
 
@@ -390,6 +346,7 @@ function getSections(items) {
 }
 
 function getItemType(item) {
+  if (item?.type === "series" || item?.type === "movie") return item.type;
   if (String(item.id ?? "").startsWith("series-")) return "series";
   return "movie";
 }
@@ -1009,10 +966,20 @@ async function confirmRating() {
   }
 }
 
-function openFolderOverlay(id) {
+async function ensureFolderOptionsLoaded() {
+  try {
+    await fetchOwnFolders();
+  } catch (error) {
+    console.error(error);
+  }
+
+  return listFolderOptions();
+}
+
+async function openFolderOverlay(id) {
   const item = getItemById(id);
   if (!item) return;
-  const folderOptions = listFolderOptions();
+  const folderOptions = await ensureFolderOptionsLoaded();
 
   setState((currentState) => ({
     ...currentState,
