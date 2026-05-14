@@ -47,7 +47,7 @@ html {
 }
 
 body {
-  font-family: Bahnschrift, "Segoe UI Variable", "Trebuchet MS", sans-serif;
+  font-family: var(--font-family-base);
   color: var(--text);
   background: linear-gradient(180deg, #f9f8fd 0%, var(--page-bg) 100%);
   overflow-y: scroll;

@@ -1,4 +1,5 @@
 :root {
+  --font-family-base: "Source Sans 3", "Segoe UI", "Trebuchet MS", sans-serif;
   --page-bg: #f5f4fa;
   --surface: #ffffff;
   --surface-soft: #efedf7;

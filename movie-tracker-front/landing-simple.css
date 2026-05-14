@@ -1,4 +1,7 @@
+@import url("https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;500;600;700;800&display=swap");
+
 :root {
+  --font-family-base: "Source Sans 3", "Segoe UI", "Trebuchet MS", sans-serif;
   --text: #3f42bf;
   --text-soft: rgba(26, 16, 34, 0.9);
   --title: #504aad;
@@ -21,7 +24,7 @@ body {
 }
 
 body {
-  font-family: Bahnschrift, "Segoe UI Variable", "Trebuchet MS", sans-serif;
+  font-family: var(--font-family-base);
   color: var(--text);
   background: #c9bce6;
 }

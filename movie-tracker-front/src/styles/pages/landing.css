@@ -21,7 +21,7 @@ body {
 }
 
 body {
-  font-family: Bahnschrift, "Segoe UI Variable", "Trebuchet MS", sans-serif;
+  font-family: var(--font-family-base);
   color: var(--text);
   background: #c9bce6;
 }
