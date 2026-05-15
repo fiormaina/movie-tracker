@@ -48,6 +48,7 @@
     user: null,
     tabs: createPrimaryTabs(),
     stats: [],
+    statsStatus: "idle",
     publicFolders: [],
     pendingFolderIds: new Set(),
     pendingFollow: false,
@@ -76,6 +77,7 @@
       user: value.user ? { ...value.user } : null,
       tabs: value.tabs.map((tab) => ({ ...tab })),
       stats: value.stats.map((stat) => ({ ...stat })),
+      statsStatus: value.statsStatus ?? "idle",
       publicFolders: value.publicFolders.map((folder) => ({
         ...folder,
         posters: folder.posters.map((poster) => [...poster]),
@@ -245,13 +247,19 @@
     }));
   }
 
-  function buildStats() {
-    return [
-      { id: "movies", value: 128, label: "Фильмов", icon: "movie" },
-      { id: "series", value: 36, label: "Сериалов", icon: "series" },
-      { id: "episodes", value: 412, label: "Эпизодов", icon: "episodes" },
-      { id: "hours", value: 584, label: "Часов просмотра", icon: "hours" },
-    ];
+  function normalizeProfileStats(stats) {
+    if (!Array.isArray(stats)) {
+      return [];
+    }
+
+    return stats
+      .map((stat) => ({
+        id: String(stat?.id ?? "").trim(),
+        value: Number.isFinite(Number(stat?.value)) ? Number(stat.value) : 0,
+        label: String(stat?.label ?? "").trim(),
+        icon: String(stat?.icon ?? "").trim() || "movie",
+      }))
+      .filter((stat) => stat.id && stat.label);
   }
 
   function syncProfileLocation(user, isOwner) {
@@ -307,6 +315,7 @@
         user: null,
         publicFolders: [],
         stats: [],
+        statsStatus: "idle",
       }));
       return;
     }
@@ -321,6 +330,7 @@
         }
       : profileView.user;
     const publicFolders = decorateFolders(profileView.publicFolders);
+    const profileStats = normalizeProfileStats(profileView.stats);
 
     syncProfileLocation(profileUser, ownRoute);
 
@@ -332,7 +342,8 @@
       isOwner: ownRoute,
       user: profileUser,
       publicFolders,
-      stats: buildStats(),
+      stats: profileStats,
+      statsStatus: Array.isArray(profileView.stats) ? "ready" : "unavailable",
       pendingFollow: options.keepPendingFollow ? currentState.pendingFollow : false,
       editProfileOverlay: ownRoute
         ? currentState.editProfileOverlay
@@ -460,18 +471,8 @@
   }
 
   function renderStats() {
-    return `
-      <section class="profile-section" aria-label="Статистика пользователя">
-        <div class="profile-section__head">
-          <div>
-            <h2 class="profile-section__title">Статистика</h2>
-            <p class="profile-section__hint">${escapeHtml(
-              state.isOwner
-                ? "Сводка по вашему просмотру: фильмы, сериалы, эпизоды и общее время."
-                : "Сводка по просмотру пользователя: фильмы, сериалы, эпизоды и часы просмотра.",
-            )}</p>
-          </div>
-        </div>
+    const content = state.statsStatus === "ready"
+      ? `
         <div class="profile-stats">
           ${state.stats
             .map(
@@ -487,6 +488,26 @@
             )
             .join("")}
         </div>
+      `
+      : `
+        <p class="profile-section__hint">
+          Статистика появится здесь, когда backend вернёт данные вашей библиотеки.
+        </p>
+      `;
+
+    return `
+      <section class="profile-section" aria-label="Статистика пользователя">
+        <div class="profile-section__head">
+          <div>
+            <h2 class="profile-section__title">Статистика</h2>
+            <p class="profile-section__hint">${escapeHtml(
+              state.isOwner
+                ? "Сводка по вашему просмотру: фильмы, сериалы, эпизоды и общее время."
+                : "Сводка по просмотру пользователя: фильмы, сериалы, эпизоды и часы просмотра.",
+            )}</p>
+          </div>
+        </div>
+        ${content}
       </section>
     `;
   }
@@ -950,7 +971,6 @@
       setState((currentState) => ({
         ...currentState,
         user: updatedUser,
-        stats: buildStats(),
         pendingFollow: false,
       }));
       showToast(
